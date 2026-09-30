@@ -1,0 +1,1931 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<title>Табель бригад</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Прорабский журнал: плотные списки, моноширинные цифры, коды табеля Т-13 (Я, В, ОТ, Б, ПР). */
+:root {
+  --bg: #eef0ec; --surface: #ffffff; --surface-2: #f4f5f2; --fg: #16191b; --muted: #596066; --hint: #868c91;
+  --line: #dde1db; --accent: #146c5f; --accent-fg: #ffffff; --accent-weak: #dcece8;
+  --good: #0ca30c; --warn: #fab219; --serious: #ec835a; --crit: #d03b3b;
+  --good-bg: #e2f4e2; --warn-bg: #fdf1d6; --crit-bg: #f9e1e1; --ot-bg: #fbe8dc;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7; --s8: #e34948;
+  --font: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111416; --surface: #1a1e21; --surface-2: #22272a; --fg: #eef0f1; --muted: #a5abaf; --hint: #7d8488;
+    --line: #2d3337; --accent: #3fb6a3; --accent-fg: #06211c; --accent-weak: #173430;
+    --good-bg: #16301a; --warn-bg: #3a2e12; --crit-bg: #3b1d1d; --ot-bg: #3a2519;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111416; --surface: #1a1e21; --surface-2: #22272a; --fg: #eef0f1; --muted: #a5abaf; --hint: #7d8488;
+  --line: #2d3337; --accent: #3fb6a3; --accent-fg: #06211c; --accent-weak: #173430;
+  --good-bg: #16301a; --warn-bg: #3a2e12; --crit-bg: #3b1d1d; --ot-bg: #3a2519;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.4 var(--font); -webkit-font-smoothing: antialiased; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); } .hint { color: var(--hint); }
+.wrap { max-width: 720px; margin: 0 auto; padding-inline: 16px; }
+
+/* demo bar */
+#demo { background: var(--accent-weak); color: var(--fg); font-size: 13px; }
+#demo .wrap { display: flex; gap: 8px; align-items: center; padding-block: 8px; flex-wrap: wrap; }
+#demo b { font-weight: 600; }
+#demo select { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; font-size: 13px; max-width: 100%; }
+
+/* top */
+#top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+#top .wrap { padding-block: 10px 8px; display: grid; gap: 8px; }
+.title-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.title-row h1 { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+.title-row .sub { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.icon-btn { border: 0; background: transparent; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: var(--muted); flex: none; }
+.icon-btn:hover { background: var(--surface-2); }
+.icon-btn svg { width: 20px; height: 20px; }
+.icon-btn.spin svg { animation: rot 1s linear infinite; } @keyframes rot { to { transform: rotate(360deg); } }
+.chip.wait { background: var(--warn-bg); }
+.ctrl-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.stepper { display: flex; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; }
+.stepper button { border: 0; background: transparent; width: 34px; height: 32px; font-size: 18px; color: var(--muted); }
+.stepper button:disabled { opacity: .3; cursor: default; }
+.stepper span { padding: 0 4px; font-weight: 500; font-size: 14px; min-width: 130px; text-align: center; }
+.sel { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 14px; max-width: 100%; min-width: 0; }
+
+/* view */
+main { padding-block: 12px 96px; }
+.stack { display: grid; gap: 12px; }
+.card { background: var(--surface); border-radius: var(--r); padding: 14px; min-width: 0; }
+.card h2 { font-size: 13px; font-weight: 600; margin: 0 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.card h2 .r { float: right; text-transform: none; letter-spacing: 0; font-weight: 500; }
+
+/* tabs */
+#tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--surface); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); }
+#tabs .wrap { display: flex; }
+#tabs button { flex: 1; border: 0; background: transparent; padding: 8px 4px 9px; display: grid; justify-items: center; gap: 2px; font-size: 11px; color: var(--hint); }
+#tabs button svg { width: 22px; height: 22px; }
+#tabs button[aria-current="page"] { color: var(--accent); font-weight: 600; }
+
+/* buttons */
+.btn { border: 0; border-radius: 10px; padding: 10px 14px; font-weight: 600; background: var(--accent); color: var(--accent-fg); display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.btn.sec { background: var(--surface-2); color: var(--fg); }
+.btn.danger { background: var(--crit); color: #fff; }
+.btn.danger-ghost { background: transparent; color: var(--crit); border: 1px solid var(--line); }
+#tabs button { position: relative; }
+.badge { position: absolute; top: 4px; left: calc(50% + 6px); min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--crit); color: #fff; font-size: 11px; font-weight: 600; line-height: 17px; font-family: var(--mono); }
+.notice { border-left: 3px solid var(--crit); background: var(--crit-bg); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+.picks { display: grid; gap: 6px; }
+.picks label { display: flex; gap: 10px; align-items: center; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); font-size: 14px; cursor: pointer; }
+.picks label:has(input:checked) { border-color: var(--accent); background: var(--accent-weak); }
+.field .picks label { color: var(--fg); font-size: 14px; }
+.field .picks input, .picks input { accent-color: var(--accent); margin: 0; width: 18px; height: 18px; padding: 0; flex: none; background: none; border: 0; }
+.field textarea { background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; width: 100%; min-height: 64px; resize: vertical; font: inherit; color: inherit; }
+.tagrow { display: flex; flex-wrap: wrap; gap: 6px; }
+.ev { font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 6px; background: var(--surface-2); }
+.ev.in { background: var(--good-bg); } .ev.out { background: var(--crit-bg); } .ev.mv { background: var(--accent-weak); }
+.btn.ghost { background: transparent; color: var(--accent); padding-inline: 6px; }
+.btn.block { width: 100%; }
+.btn.sm { padding: 7px 12px; font-size: 14px; border-radius: 8px; }
+.btn:disabled { opacity: .5; }
+.btn svg { width: 18px; height: 18px; }
+
+/* KPI */
+.hero { display: grid; gap: 2px; }
+.hero .lbl { color: var(--muted); font-size: 13px; }
+.hero .big { font-family: var(--mono); font-size: 32px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
+.delta { font-size: 13px; color: var(--muted); }
+.delta b { font-weight: 600; color: var(--fg); }
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border-radius: var(--r); overflow: hidden; }
+@media (min-width: 560px) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.tile { background: var(--surface); padding: 12px 14px; min-width: 0; }
+.tile .lbl { font-size: 12px; color: var(--muted); }
+.tile .val { font-family: var(--mono); font-size: 19px; font-weight: 600; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .note { font-size: 12px; color: var(--hint); margin-top: 1px; }
+
+/* today strip */
+.strip { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); }
+.strip span { display: inline-flex; align-items: center; gap: 6px; }
+.strip b { color: var(--fg); font-family: var(--mono); font-weight: 600; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+
+/* chips */
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500; padding: 2px 8px 2px 6px; border-radius: 999px; background: var(--surface-2); color: var(--fg); white-space: nowrap; }
+.chip svg { width: 13px; height: 13px; }
+.chip.good { background: var(--good-bg); } .chip.good svg { color: var(--good); }
+.chip.warn { background: var(--warn-bg); } .chip.warn svg { color: var(--warn); }
+.chip.crit { background: var(--crit-bg); } .chip.crit svg { color: var(--crit); }
+.code { font-family: var(--mono); font-weight: 600; font-size: 11px; }
+
+/* list rows */
+.list { display: grid; }
+.row { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-top: 1px solid var(--line); min-width: 0; }
+.row:first-child { border-top: 0; }
+.row.tap { cursor: pointer; }
+.row .main { flex: 1; min-width: 0; }
+.row .name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .meta { font-size: 13px; color: var(--muted); display: flex; gap: 6px 10px; flex-wrap: wrap; align-items: center; margin-top: 2px; }
+.row .side { text-align: right; flex: none; }
+.row .side .v { font-family: var(--mono); font-weight: 600; }
+.row .side .s { font-size: 12px; color: var(--hint); }
+.grp { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; padding: 14px 0 4px; }
+.act { min-width: 92px; }
+
+/* object cards */
+.obj { display: grid; gap: 8px; cursor: pointer; }
+.obj-head { display: flex; align-items: baseline; gap: 8px; }
+.obj-head .n { font-weight: 600; flex: 1; min-width: 0; }
+.obj-head .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; transform: translateY(1px); }
+.meter { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--good); border-radius: 3px; }
+.kv { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.kv div { min-width: 0; }
+.kv .l { font-size: 11px; color: var(--hint); }
+.kv .v { font-family: var(--mono); font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* rank */
+.rank .row { padding: 8px 0; }
+.bar { height: 4px; border-radius: 2px; background: var(--surface-2); margin-top: 5px; }
+.bar i { display: block; height: 100%; border-radius: 2px; background: var(--muted); }
+
+/* chart */
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart text { fill: var(--hint); font: 11px var(--mono); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.tip { position: absolute; pointer-events: none; background: var(--fg); color: var(--bg); font-size: 12px; border-radius: 8px; padding: 7px 9px; min-width: 130px; z-index: 2; box-shadow: 0 4px 16px rgb(0 0 0 / .18); }
+.tip .t { font-weight: 600; margin-bottom: 3px; }
+.tip .l { display: flex; justify-content: space-between; gap: 12px; }
+.tip .l span:last-child { font-family: var(--mono); }
+.tip i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-right: 5px; }
+
+/* timesheet matrix */
+.mx-wrap { overflow-x: auto; }
+table.mx { border-collapse: separate; border-spacing: 0; font-size: 12px; }
+.mx th, .mx td { padding: 0; height: 30px; text-align: center; border-bottom: 1px solid var(--line); }
+.mx thead th { font-weight: 500; color: var(--muted); font-family: var(--mono); height: 34px; line-height: 1.1; }
+.mx thead th small { display: block; font-size: 9px; color: var(--hint); font-family: var(--font); }
+.mx .nm { position: sticky; left: 0; background: var(--surface); text-align: left; padding: 0 10px 0 0; min-width: 132px; max-width: 132px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 1; cursor: pointer; font-family: var(--font); font-size: 13px; }
+.mx .d { min-width: 30px; font-family: var(--mono); position: relative; }
+.mx .we { background: var(--surface-2); }
+.mx .td { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.mx .ot { background: var(--ot-bg); font-weight: 600; }
+.mx .late::after { content: ''; position: absolute; top: 4px; right: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--warn); }
+.mx .cd { color: var(--muted); font-weight: 600; font-size: 10px; }
+.mx .cd.pr { color: var(--crit); }
+.mx .tot { font-family: var(--mono); font-weight: 600; padding: 0 6px; min-width: 50px; }
+.mx-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); margin-top: 10px; }
+.mx-legend b { font-family: var(--mono); color: var(--fg); }
+
+/* sheets & pages */
+#scrim { position: fixed; inset: 0; background: rgb(0 0 0 / .35); z-index: 20; }
+#sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; background: var(--surface); border-radius: 16px 16px 0 0; max-height: 88%; overflow: auto; padding-bottom: env(safe-area-inset-bottom, 0px); }
+#sheet .wrap { padding-block: 8px 18px; display: grid; gap: 14px; }
+.grab { width: 36px; height: 4px; border-radius: 2px; background: var(--line); margin: 6px auto 0; }
+#sheet h3 { margin: 0; font-size: 18px; }
+#page { position: fixed; inset: 0; z-index: 10; background: var(--bg); overflow: auto; }
+#page .top { position: sticky; top: 0; background: var(--bg); border-bottom: 1px solid var(--line); z-index: 2; padding-top: env(safe-area-inset-top, 0px); }
+#page .top .wrap { display: flex; align-items: center; gap: 6px; padding-block: 8px; }
+#page main { padding-bottom: 40px; }
+.field { display: grid; gap: 4px; }
+.field label { font-size: 13px; color: var(--muted); }
+.field input, .field select { background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; width: 100%; min-width: 0; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.seg { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.seg button { border: 1px solid var(--line); background: var(--surface-2); border-radius: 10px; padding: 8px 2px; display: grid; gap: 1px; font-size: 11px; color: var(--muted); }
+.seg button b { font-family: var(--mono); font-size: 14px; color: var(--fg); }
+.seg button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-weak); color: var(--fg); }
+.receipt { display: grid; gap: 6px; font-size: 14px; }
+.receipt div { display: flex; justify-content: space-between; gap: 10px; }
+.receipt span:last-child { font-family: var(--mono); }
+.receipt .sum { border-top: 1px dashed var(--line); padding-top: 8px; font-weight: 700; font-size: 16px; }
+.err { color: var(--crit); font-size: 13px; }
+#toast { position: fixed; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 9px 14px; border-radius: 10px; font-size: 14px; z-index: 30; max-width: calc(100% - 32px); }
+.empty { text-align: center; padding: 28px 12px; color: var(--muted); }
+.center-screen { min-height: 70vh; display: grid; place-content: center; text-align: center; gap: 12px; padding-block: 24px; }
+.center-screen .id { font-family: var(--mono); font-size: 28px; font-weight: 600; background: var(--surface); padding: 10px 16px; border-radius: 10px; user-select: all; }
+.search { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; width: 100%; }
+.xtable { overflow-x: auto; }
+.xtable table { border-collapse: collapse; font-size: 12px; }
+.xtable td, .xtable th { border: 1px solid var(--line); padding: 4px 6px; white-space: nowrap; }
+.xtable th { background: var(--surface-2); font-weight: 600; }
+.tabs2 { display: flex; gap: 6px; flex-wrap: wrap; }
+.tabs2 button { border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 4px 10px; font-size: 13px; }
+.tabs2 button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+@media (prefers-reduced-motion: no-preference) {
+  #sheet { animation: up .18s ease-out; }
+  #page { animation: fade .15s ease-out; }
+  @keyframes up { from { transform: translateY(24px); opacity: .6; } }
+  @keyframes fade { from { opacity: 0; } }
+}
+</style>
+
+</head>
+<body>
+<div id="demo" hidden></div>
+<header id="top"><div class="wrap"></div></header>
+<main id="view" class="wrap"><div class="center-screen"><div class="muted">Загрузка…</div></div></main>
+<nav id="tabs" hidden><div class="wrap"></div></nav>
+<div id="page" hidden></div>
+<div id="scrim" hidden></div>
+<div id="sheet" hidden></div>
+<div id="toast" hidden></div>
+
+<script>
+/* ================================================================
+   ЯДРО: расчёты табеля, отчёты, права доступа.
+   Один и тот же код работает на сервере (Apps Script) и в демо.
+   ================================================================ */
+var Core = (function () {
+  var C = (typeof CONFIG !== 'undefined' && CONFIG) || {};
+  function opt(k, d) { return C[k] === undefined ? d : C[k]; }
+  var CFG = {
+    lateGraceMin: opt('lateGraceMin', 5),          // опоздание считается, если больше N минут
+    defaultLunch: opt('defaultLunch', 60),         // обед по умолчанию, минут
+    foremanEditDays: opt('foremanEditDays', 3),    // бригадир может править последние N дней
+    foremanSeesPay: opt('foremanSeesPay', true),   // бригадир видит суммы зарплаты
+    foremanGivesAdvance: opt('foremanGivesAdvance', false), // бригадир может вносить авансы
+    foremanCanExport: opt('foremanCanExport', true),
+    foremanSetsRate: opt('foremanSetsRate', true)  // бригадир указывает ставку при приёме
+  };
+  var HIRE_REASONS = ['Новый сотрудник', 'Замена выбывшего', 'Перевод с другого объекта', 'Усиление бригады', 'Сезонные работы', 'Другое'];
+  var FIRE_REASONS = ['Уволился по собственному желанию', 'Уволен за нарушение дисциплины', 'Не прошёл испытательный срок',
+    'Окончание работ на объекте', 'Перевод на другой объект', 'Другое'];
+  var VERSION = '2026-09-30.4';
+  var BOSS = 'Руководитель', FOREMAN = 'Бригадир';
+  var STATUSES = [
+    { id: 'Явка', code: 'Я' }, { id: 'Выходной', code: 'В' }, { id: 'Отпуск', code: 'ОТ' },
+    { id: 'Больничный', code: 'Б' }, { id: 'Прогул', code: 'ПР' }
+  ];
+  var CODE = {}; STATUSES.forEach(function (s) { CODE[s.id] = s.code; });
+
+  /* ---------- helpers ---------- */
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function mins(t) { if (!t) return null; var p = String(t).split(':'); return (+p[0]) * 60 + (+p[1] || 0); }
+  function r2(x) { return Math.round((+x || 0) * 100) / 100; }
+  function monthOf(d) { return String(d).slice(0, 7); }
+  function dim(m) { return new Date(Date.UTC(+m.slice(0, 4), +m.slice(5, 7), 0)).getUTCDate(); }
+  function addDays(d, n) { var t = new Date(d + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); }
+  function addMonths(m, n) { var t = new Date(Date.UTC(+m.slice(0, 4), +m.slice(5, 7) - 1 + n, 1)); return t.toISOString().slice(0, 7); }
+  function dow(d) { return new Date(d + 'T00:00:00Z').getUTCDay(); }
+  function isTime(t) { return /^([01]?\d|2[0-3]):[0-5]\d$/.test(String(t || '')); }
+  function normTime(t) { if (!t) return ''; var m = mins(t); return pad(Math.floor(m / 60)) + ':' + pad(m % 60); }
+  function need(c, msg) { if (!c) throw new Error(msg); }
+  function eq(a, b) { return String(a) === String(b); }
+  function find(list, f) { for (var i = 0; i < list.length; i++) if (f(list[i])) return list[i]; return null; }
+  function mapBy(list, k) { var o = {}; list.forEach(function (x) { o[x[k || 'id']] = x; }); return o; }
+
+  function isBoss(ctx) { return ctx.role === BOSS; }
+  function canSee(ctx, objId) { return isBoss(ctx) || eq(objId, ctx.objectId); }
+  function paySeen(ctx) { return isBoss(ctx) || CFG.foremanSeesPay; }
+
+  /* ---------- расчёт одной записи табеля ---------- */
+  function calcRecord(rec, obj) {
+    var h = 0;
+    if (rec.status === 'Явка' && rec.in && rec.out) {
+      var d = mins(rec.out) - mins(rec.in); if (d < 0) d += 1440;        // смена через полночь
+      h = Math.max(0, (d - (+rec.lunch || 0)) / 60);
+    }
+    h = r2(h);
+    var norm = +rec.norm || 8, nh = Math.min(h, norm), ot = r2(h - nh);
+    var rate = +rec.rate || 0, k = +rec.otk || 1;
+    rec.hours = h; rec.ot = ot; rec.sum = r2(nh * rate + ot * rate * k);
+    var late = 0;
+    if (rec.status === 'Явка' && rec.in && obj && obj.shiftStart) {
+      var l = mins(rec.in) - mins(obj.shiftStart);
+      if (l > CFG.lateGraceMin) late = l;
+    }
+    rec.late = late;
+    return rec;
+  }
+
+  /* ---------- отчёт за месяц по сотрудникам ---------- */
+  function monthRows(D, month, filter, withInactive) {
+    var emps = mapBy(D.employees), map = {}, order = [];
+    function row(empId, objId) {
+      if (!map[empId]) {
+        var e = emps[empId] || { id: empId, name: '(удалён)', position: '', objectId: objId, rate: 0 };
+        map[empId] = { empId: e.id, name: e.name, position: e.position, objectId: e.objectId, rate: +e.rate || 0, active: !!e.active,
+          days: 0, hours: 0, ot: 0, sum: 0, sum1_15: 0, late: 0, lateMin: 0, absent: 0, sick: 0, vacation: 0, off: 0,
+          advance: 0, bonus: 0, deduction: 0, toPay: 0, cells: {} };
+        order.push(empId);
+      }
+      return map[empId];
+    }
+    D.employees.forEach(function (e) { if ((e.active || withInactive) && filter(e.objectId)) row(e.id, e.objectId); });
+    D.records.forEach(function (r) {
+      if (monthOf(r.date) !== month || !filter(r.objectId)) return;
+      var x = row(r.empId, r.objectId), day = +r.date.slice(8, 10);
+      x.cells[day] = { s: r.status, h: r.hours, ot: r.ot, late: r.late, open: r.status === 'Явка' && !!r.in && !r.out };
+      if (r.status === 'Явка') {
+        x.days++; x.hours += r.hours; x.ot += r.ot; x.sum += r.sum; if (day <= 15) x.sum1_15 += r.sum;
+        if (r.late) { x.late++; x.lateMin += r.late; }
+      } else if (r.status === 'Прогул') x.absent++;
+      else if (r.status === 'Больничный') x.sick++;
+      else if (r.status === 'Отпуск') x.vacation++;
+      else x.off++;
+    });
+    D.advances.forEach(function (a) { if (monthOf(a.date) === month && filter(a.objectId)) row(a.empId, a.objectId).advance += +a.amount || 0; });
+    D.adjustments.forEach(function (a) {
+      if (a.month !== month || !filter(a.objectId)) return;
+      var x = row(a.empId, a.objectId); x.bonus += +a.bonus || 0; x.deduction += +a.deduction || 0;
+    });
+    var objs = mapBy(D.objects);
+    return order.map(function (id) {
+      var x = map[id];
+      ['hours', 'ot', 'sum', 'sum1_15', 'advance', 'bonus', 'deduction'].forEach(function (k) { x[k] = r2(x[k]); });
+      x.toPay = r2(x.sum + x.bonus - x.deduction - x.advance);
+      x.objectName = (objs[x.objectId] || {}).name || x.objectId;
+      var ee = emps[x.empId]; if (ee && !ee.active) { x.dismissedAt = ee.dismissedAt || ''; x.dismissReason = ee.dismissReason || ''; }
+      return x;
+    }).sort(function (a, b) { return String(a.objectName).localeCompare(b.objectName) || String(a.name).localeCompare(b.name); });
+  }
+  function stripPay(r) {
+    ['rate', 'sum', 'sum1_15', 'advance', 'bonus', 'deduction', 'toPay'].forEach(function (k) { delete r[k]; });
+    return r;
+  }
+  function totalsOf(rows) {
+    var t = { count: rows.length, days: 0, hours: 0, ot: 0, sum: 0, advance: 0, bonus: 0, deduction: 0, toPay: 0, late: 0, absent: 0 };
+    rows.forEach(function (r) { Object.keys(t).forEach(function (k) { if (k !== 'count') t[k] += +r[k] || 0; }); });
+    Object.keys(t).forEach(function (k) { t[k] = r2(t[k]); });
+    return t;
+  }
+
+  /* ---------- сводка для руководителя ---------- */
+  function dashboard(D, month, today) {
+    var all = function () { return true; };
+    var rows = monthRows(D, month, all);
+    var isCur = monthOf(today) === month;
+    var n = dim(month), lastDay = isCur ? +today.slice(8, 10) : n;
+    var objects = D.objects.filter(function (o) { return o.active; });
+    var perObj = {};
+    objects.forEach(function (o) {
+      perObj[o.id] = { id: o.id, name: o.name, shiftStart: o.shiftStart, headcount: 0, presentToday: 0, onSite: 0, lateToday: 0,
+        hours: 0, ot: 0, sum: 0, advance: 0, late: 0, absent: 0, days: 0 };
+    });
+    D.employees.forEach(function (e) { if (e.active && perObj[e.objectId]) perObj[e.objectId].headcount++; });
+    var daily = [];
+    for (var d = 1; d <= n; d++) daily.push({ day: d, date: month + '-' + pad(d), total: 0, hours: 0, present: 0, byObj: {} });
+    var status = {}; STATUSES.forEach(function (s) { status[s.id] = 0; });
+    var prevMonth = addMonths(month, -1), prevSum = 0;
+    D.records.forEach(function (r) {
+      var o = perObj[r.objectId];
+      if (r.date === today && o && r.status === 'Явка') {
+        o.presentToday++; if (r.in && !r.out) o.onSite++; if (r.late) o.lateToday++;
+      }
+      if (monthOf(r.date) === prevMonth && +r.date.slice(8, 10) <= lastDay && r.status === 'Явка') prevSum += r.sum;
+      if (monthOf(r.date) !== month) return;
+      status[r.status] = (status[r.status] || 0) + 1;
+      if (!o) return;
+      if (r.status === 'Явка') {
+        var dd = daily[+r.date.slice(8, 10) - 1];
+        dd.total += r.sum; dd.hours += r.hours; dd.present++; dd.byObj[r.objectId] = (dd.byObj[r.objectId] || 0) + r.sum;
+        o.hours += r.hours; o.ot += r.ot; o.sum += r.sum; o.days++; if (r.late) o.late++;
+      } else if (r.status === 'Прогул') o.absent++;
+    });
+    D.advances.forEach(function (a) { if (monthOf(a.date) === month && perObj[a.objectId]) perObj[a.objectId].advance += +a.amount || 0; });
+    daily.forEach(function (x) { x.total = r2(x.total); x.hours = r2(x.hours); Object.keys(x.byObj).forEach(function (k) { x.byObj[k] = r2(x.byObj[k]); }); });
+    var objList = objects.map(function (o) {
+      var x = perObj[o.id];
+      ['hours', 'ot', 'sum', 'advance'].forEach(function (k) { x[k] = r2(x[k]); });
+      x.toPay = r2(rows.filter(function (r) { return eq(r.objectId, o.id); }).reduce(function (s, r) { return s + r.toPay; }, 0));
+      var fm = find(D.users, function (u) { return u.role === FOREMAN && eq(u.objectId, o.id); });
+      x.foreman = fm ? fm.name : '';
+      return x;
+    });
+    var t = totalsOf(rows);
+    var headcount = objList.reduce(function (s, o) { return s + o.headcount; }, 0);
+    var present = objList.reduce(function (s, o) { return s + o.presentToday; }, 0);
+    var lateToday = objList.reduce(function (s, o) { return s + o.lateToday; }, 0);
+    var onSite = objList.reduce(function (s, o) { return s + o.onSite; }, 0);
+    function top(key, cond) {
+      return rows.filter(function (r) { return cond(r); }).sort(function (a, b) { return b[key] - a[key]; }).slice(0, 5)
+        .map(function (r) { return { empId: r.empId, name: r.name, objectName: r.objectName, value: r[key], extra: key === 'late' ? r.lateMin : r.sum }; });
+    }
+    return {
+      month: month, today: today, isCurrent: isCur, lastDay: lastDay, days: n,
+      totals: {
+        sum: t.sum, hours: t.hours, ot: t.ot, advance: t.advance, bonus: t.bonus, deduction: t.deduction, toPay: t.toPay,
+        headcount: headcount, presentToday: present, onSite: onSite, lateToday: lateToday,
+        late: t.late, absent: t.absent, manDays: t.days,
+        attendance: (t.days + t.absent) ? r2(t.days / (t.days + t.absent)) : 0,
+        avgHours: t.days ? r2(t.hours / t.days) : 0,
+        otShare: t.hours ? r2(t.ot / t.hours) : 0,
+        avgRate: t.hours ? r2(t.sum / t.hours) : 0,
+        prevSum: r2(prevSum)
+      },
+      objects: objList, daily: daily, status: status, hr: hrSummary(D, month, function () { return true; }),
+      topOT: top('ot', function (r) { return r.ot > 0; }),
+      topLate: top('late', function (r) { return r.late > 0; }),
+      topAbsent: top('absent', function (r) { return r.absent > 0; })
+    };
+  }
+
+  function hrSummary(D, month, filter) {
+    var ev = (D.hr || []).filter(function (h) { return monthOf(h.date) === month && filter(h.objectId); })
+      .sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; });
+    var objs = mapBy(D.objects), reasons = {};
+    ev.forEach(function (h) { if (h.action === 'Удалён') reasons[h.reason] = (reasons[h.reason] || 0) + 1; });
+    return {
+      hired: ev.filter(function (h) { return h.action === 'Принят' || h.action === 'Восстановлен'; }).length,
+      dismissed: ev.filter(function (h) { return h.action === 'Удалён'; }).length,
+      transferred: ev.filter(function (h) { return h.action === 'Переведён'; }).length,
+      reasons: reasons,
+      events: ev.slice(0, 10).map(function (h) { var x = JSON.parse(JSON.stringify(h)); x.objectName = (objs[h.objectId] || {}).name || h.objectId; return x; })
+    };
+  }
+
+  /* ---------- заявки на доступ (вызывается для неизвестных пользователей) ---------- */
+  function registerRequest(store, u) {
+    var D = store.data, id = String(u.id);
+    if (find(D.requests, function (r) { return r.tgId === id; })) return;
+    store.insert('requests', { tgId: id, name: [u.first_name, u.last_name].filter(Boolean).join(' '), username: u.username || '', date: store.now().date + ' ' + store.now().time });
+  }
+
+  /* ---------- выгрузка ---------- */
+  function buildExport(D, month, filter, withPay) {
+    var rows = monthRows(D, month, filter), n = dim(month), objs = mapBy(D.objects);
+    var sheets = [];
+    var h1 = ['Объект', 'Сотрудник', 'Должность'];
+    if (withPay) h1.push('Ставка, ₽/ч');
+    h1 = h1.concat(['Дней', 'Часов', 'Сверхурочных, ч', 'Опозданий', 'Прогулов', 'Больничных', 'Отпуск']);
+    if (withPay) h1 = h1.concat(['Начислено, ₽', 'Начислено 1–15, ₽', 'Аванс, ₽', 'Премия, ₽', 'Удержание, ₽', 'К выплате, ₽']);
+    var r1 = rows.map(function (r) {
+      var a = [r.objectName, r.name, r.position];
+      if (withPay) a.push(r.rate);
+      a = a.concat([r.days, r.hours, r.ot, r.late, r.absent, r.sick, r.vacation]);
+      if (withPay) a = a.concat([r.sum, r.sum1_15, r.advance, r.bonus, r.deduction, r.toPay]);
+      return a;
+    });
+    var t = totalsOf(rows);
+    var tr = ['ИТОГО', rows.length + ' чел.', ''];
+    if (withPay) tr.push('');
+    tr = tr.concat([t.days, t.hours, t.ot, t.late, t.absent, '', '']);
+    if (withPay) tr = tr.concat([t.sum, '', t.advance, t.bonus, t.deduction, t.toPay]);
+    r1.push(tr);
+    sheets.push({ name: 'Сотрудники', header: h1, rows: r1 });
+
+    var h2 = ['Объект', 'Сотрудник']; for (var d = 1; d <= n; d++) h2.push(d); h2 = h2.concat(['Дней', 'Часов']);
+    sheets.push({ name: 'Табель', header: h2, rows: rows.map(function (r) {
+      var a = [r.objectName, r.name];
+      for (var d = 1; d <= n; d++) { var c = r.cells[d]; a.push(!c ? '' : c.s === 'Явка' ? c.h : CODE[c.s] || c.s); }
+      return a.concat([r.days, r.hours]);
+    }) });
+
+    var byObj = {};
+    rows.forEach(function (r) {
+      var o = byObj[r.objectId] || (byObj[r.objectId] = { name: r.objectName, n: 0, days: 0, hours: 0, ot: 0, sum: 0, advance: 0, toPay: 0 });
+      o.n++; o.days += r.days; o.hours += r.hours; o.ot += r.ot; o.sum += r.sum; o.advance += r.advance; o.toPay += r.toPay;
+    });
+    var h3 = ['Объект', 'Сотрудников', 'Человеко-дней', 'Часов', 'Сверхурочных, ч'];
+    if (withPay) h3 = h3.concat(['Начислено, ₽', 'Авансы, ₽', 'К выплате, ₽']);
+    sheets.push({ name: 'Объекты', header: h3, rows: Object.keys(byObj).map(function (k) {
+      var o = byObj[k], a = [o.name, o.n, o.days, r2(o.hours), r2(o.ot)];
+      return withPay ? a.concat([r2(o.sum), r2(o.advance), r2(o.toPay)]) : a;
+    }) });
+
+    var emps = mapBy(D.employees);
+    var h4 = ['Дата', 'Объект', 'Сотрудник', 'Статус', 'Приход', 'Уход', 'Обед, мин', 'Часы', 'Сверх, ч', 'Опоздание, мин', 'Внёс'];
+    if (withPay) h4.splice(9, 0, 'Сумма, ₽');
+    var recs = D.records.filter(function (r) { return monthOf(r.date) === month && filter(r.objectId); })
+      .sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+    sheets.push({ name: 'Записи', header: h4, rows: recs.map(function (r) {
+      var a = [r.date.split('-').reverse().join('.'), (objs[r.objectId] || {}).name || r.objectId, (emps[r.empId] || {}).name || r.empName,
+        r.status, r.in || '', r.out || '', r.lunch, r.hours, r.ot, r.late, r.by || ''];
+      if (withPay) a.splice(9, 0, r.sum);
+      return a;
+    }) });
+    return sheets;
+  }
+
+  /* ---------- API ---------- */
+  function handle(action, p, ctx, store) {
+    var D = store.data, now = store.now(); p = p || {};
+    var objs = mapBy(D.objects);
+    function emp(id) { var e = find(D.employees, function (x) { return eq(x.id, id); }); need(e, 'Сотрудник не найден'); need(canSee(ctx, e.objectId), 'Нет доступа к этому сотруднику'); return e; }
+    function recOf(empId, date) { return find(D.records, function (r) { return eq(r.empId, empId) && r.date === date; }); }
+    function editable(date) {
+      if (isBoss(ctx)) return true;
+      return date <= now.date && date >= addDays(now.date, -CFG.foremanEditDays);
+    }
+    function visibleFilter(objId) { return function (o) { return canSee(ctx, o) && (!objId || eq(o, objId)); }; }
+    function save(rec, isNew) {
+      calcRecord(rec, objs[rec.objectId]); rec.by = ctx.name; rec.updated = now.date + ' ' + now.time;
+      if (isNew) store.insert('records', rec); else store.update('records', rec);
+    }
+    function hrLog(e, action, reason, comment, date) {
+      if (!D.hr) return;
+      store.insert('hr', { id: store.uid(), date: date || now.date, empId: e.id, empName: e.name, objectId: e.objectId, action: action,
+        reason: String(reason || '').slice(0, 120), comment: String(comment || '').slice(0, 300), by: ctx.name });
+    }
+    function assignUser(p) {
+      var id = String(p.tgId || '').trim();
+      need(/^\d{3,15}$/.test(id), 'Telegram ID — это число из приложения, например 123456789');
+      need(p.role === BOSS || p.role === FOREMAN, 'Выберите роль');
+      if (p.role === FOREMAN) need(objs[p.objectId], 'Выберите объект для бригадира');
+      var u = find(D.users, function (z) { return eq(z.tgId, id); });
+      var rq = find(D.requests || [], function (z) { return eq(z.tgId, id); });
+      if (u && eq(id, ctx.tgId)) need(p.role === BOSS, 'Нельзя снять роль руководителя с самого себя');
+      var name = String(p.name || (u && u.name) || (rq && rq.name) || '').trim();
+      need(name, 'Укажите имя');
+      var isNew = !u;
+      u = u || { tgId: id };
+      u.name = name; u.role = p.role; u.objectId = p.role === FOREMAN ? p.objectId : '';
+      if (isNew) store.insert('users', u); else store.update('users', u);
+      if (rq) store.remove('requests', rq);
+    }
+    function accessView(focusId) {
+      return {
+        focus: focusId || '',
+        objects: D.objects.map(function (o) {
+          return { id: o.id, name: o.name, address: o.address, shiftStart: o.shiftStart, active: o.active,
+            headcount: D.employees.filter(function (e) { return e.active && eq(e.objectId, o.id); }).length,
+            foremen: D.users.filter(function (u) { return u.role === FOREMAN && eq(u.objectId, o.id); }).map(function (u) { return { tgId: u.tgId, name: u.name }; }) };
+        }),
+        users: D.users.map(function (u) { return { tgId: u.tgId, name: u.name, role: u.role, objectId: u.objectId, objectName: (objs[u.objectId] || {}).name || '', self: eq(u.tgId, ctx.tgId) }; }),
+        requests: (D.requests || []).slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; })
+      };
+    }
+    function newRec(e, date) {
+      return { id: store.uid(), date: date, empId: e.id, empName: e.name, objectId: e.objectId, status: 'Явка', in: '', out: '',
+        lunch: CFG.defaultLunch, rate: +e.rate || 0, norm: +e.norm || 8, otk: +e.otk || 1, hours: 0, ot: 0, sum: 0, late: 0, by: '', updated: '' };
+    }
+    function dayView(date, objId) {
+      var rows = D.employees.filter(function (e) { return canSee(ctx, e.objectId) && (!objId || eq(e.objectId, objId)); })
+        .map(function (e) {
+          var r = recOf(e.id, date);
+          if (!e.active && !r) return null;
+          var rr = r ? JSON.parse(JSON.stringify(r)) : null;
+          if (rr && !paySeen(ctx)) { delete rr.sum; delete rr.rate; }
+          return { emp: { id: e.id, name: e.name, position: e.position, objectId: e.objectId, objectName: (objs[e.objectId] || {}).name }, rec: rr };
+        }).filter(Boolean)
+        .sort(function (a, b) { return String(a.emp.objectName).localeCompare(b.emp.objectName) || a.emp.name.localeCompare(b.emp.name); });
+      var s = { total: rows.length, present: 0, onSite: 0, left: 0, late: 0, unmarked: 0, absent: 0, other: 0 };
+      rows.forEach(function (x) {
+        var r = x.rec;
+        if (!r) s.unmarked++;
+        else if (r.status === 'Явка') { s.present++; if (r.in && !r.out) s.onSite++; if (r.out) s.left++; if (r.late) s.late++; }
+        else if (r.status === 'Прогул') s.absent++; else s.other++;
+      });
+      return { date: date, objectId: objId || '', isToday: date === now.date, editable: editable(date), rows: rows, summary: s, now: now.time };
+    }
+
+    switch (action) {
+      case 'init':
+        var first = null;
+        if (p.withFirst) first = isBoss(ctx)
+          ? { action: 'dashboard', params: { month: monthOf(now.date) }, data: dashboard(D, monthOf(now.date), now.date) }
+          : { action: 'day', params: { date: now.date, objectId: '' }, data: dayView(now.date, '') };
+        return {
+          first: first,
+          version: VERSION,
+          me: { name: ctx.name, role: ctx.role, objectId: ctx.objectId, isBoss: isBoss(ctx) },
+          today: now.date, time: now.time, statuses: STATUSES,
+          objects: D.objects.filter(function (o) { return o.active && canSee(ctx, o.id); })
+            .map(function (o) { return { id: o.id, name: o.name, address: o.address, shiftStart: o.shiftStart }; }),
+          config: { foremanSeesPay: CFG.foremanSeesPay, foremanGivesAdvance: CFG.foremanGivesAdvance, foremanEditDays: CFG.foremanEditDays,
+            foremanCanExport: CFG.foremanCanExport, paySeen: paySeen(ctx), canExport: isBoss(ctx) || CFG.foremanCanExport,
+            canAdvance: isBoss(ctx) || CFG.foremanGivesAdvance, lateGraceMin: CFG.lateGraceMin,
+            canSetRate: isBoss(ctx) || CFG.foremanSetsRate },
+          hireReasons: HIRE_REASONS, fireReasons: FIRE_REASONS,
+          pendingRequests: isBoss(ctx) ? (D.requests || []).length : 0
+        };
+
+      case 'day':
+        return dayView(p.date || now.date, p.objectId);
+
+      case 'mark': {
+        var date = p.date || now.date;
+        need(editable(date), 'Этот день уже закрыт для изменений');
+        var ids = [].concat(p.empIds || []);
+        need(ids.length, 'Не выбраны сотрудники');
+        ids.forEach(function (id) {
+          var e = emp(id), r = recOf(e.id, date), isNew = !r;
+          if (p.action === 'in') {
+            var t = p.time || (date === now.date ? now.time : ((objs[e.objectId] || {}).shiftStart || '08:00'));
+            need(isTime(t), 'Время в формате ЧЧ:ММ');
+            need(date !== now.date || mins(t) <= mins(now.time) + 5, 'Время прихода не может быть позже текущего');
+            if (r && r.status === 'Явка' && r.in) return;
+            r = r || newRec(e, date); r.status = 'Явка'; r.in = normTime(t); r.out = '';
+          } else if (p.action === 'out') {
+            need(r && r.in, e.name + ': сначала отметьте приход');
+            if (r.out) return;
+            var to = p.time || now.time;
+            need(isTime(to), 'Время в формате ЧЧ:ММ');
+            need(date !== now.date || mins(to) <= mins(now.time) + 5, 'Время ухода не может быть позже текущего');
+            r.out = normTime(to);
+          } else if (p.action === 'status') {
+            need(CODE[p.status], 'Неизвестный статус');
+            r = r || newRec(e, date); r.status = p.status;
+            if (p.status !== 'Явка') { r.in = ''; r.out = ''; }
+          } else throw new Error('Неизвестное действие');
+          if (p.offline) r.comment = 'Отмечено без связи, отправлено в ' + now.time;
+          save(r, isNew);
+        });
+        return dayView(date, p.objectId);
+      }
+
+      case 'edit': {
+        var d2 = p.date || now.date;
+        need(editable(d2), 'Этот день уже закрыт для изменений');
+        var e2 = emp(p.empId), r2_ = recOf(e2.id, d2), isNew2 = !r2_;
+        need(CODE[p.status], 'Неизвестный статус');
+        r2_ = r2_ || newRec(e2, d2);
+        r2_.status = p.status;
+        if (p.status === 'Явка') {
+          need(isTime(p.in), 'Укажите время прихода в формате ЧЧ:ММ');
+          need(!p.out || isTime(p.out), 'Время ухода в формате ЧЧ:ММ');
+          r2_.in = normTime(p.in); r2_.out = p.out ? normTime(p.out) : '';
+          var l = Math.max(0, Math.min(600, parseInt(p.lunch, 10) || 0)); r2_.lunch = l;
+        } else { r2_.in = ''; r2_.out = ''; }
+        if (p.comment !== undefined) r2_.comment = String(p.comment).slice(0, 300);
+        save(r2_, isNew2);
+        return dayView(d2, p.objectId);
+      }
+
+      case 'month': {
+        var m = p.month || monthOf(now.date);
+        var rows = monthRows(D, m, visibleFilter(p.objectId), !!p.withInactive);
+        if (!paySeen(ctx)) rows.forEach(stripPay);
+        var dows = []; for (var i = 1; i <= dim(m); i++) dows.push(dow(m + '-' + pad(i)));
+        return { month: m, days: dim(m), dows: dows, today: now.date, rows: rows, totals: totalsOf(rows) };
+      }
+
+      case 'employee': {
+        var e3 = emp(p.empId), m3 = p.month || monthOf(now.date);
+        var row = monthRows(D, m3, function (o) { return canSee(ctx, o); }).filter(function (r) { return eq(r.empId, e3.id); })[0];
+        var recs = D.records.filter(function (r) { return eq(r.empId, e3.id) && monthOf(r.date) === m3; })
+          .sort(function (a, b) { return a.date < b.date ? -1 : 1; }).map(function (r) { return JSON.parse(JSON.stringify(r)); });
+        var adv = D.advances.filter(function (a) { return eq(a.empId, e3.id) && monthOf(a.date) === m3; });
+        var adj = D.adjustments.filter(function (a) { return eq(a.empId, e3.id) && a.month === m3; });
+        var info = { id: e3.id, name: e3.name, position: e3.position, objectId: e3.objectId, objectName: (objs[e3.objectId] || {}).name,
+          phone: e3.phone, active: e3.active, norm: +e3.norm || 8, otk: +e3.otk || 1, rate: +e3.rate || 0,
+          hiredAt: e3.hiredAt || '', dismissedAt: e3.dismissedAt || '', dismissReason: e3.dismissReason || '' };
+        var hist = (D.hr || []).filter(function (h) { return eq(h.empId, e3.id); }).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+        if (!paySeen(ctx)) { delete info.rate; if (row) stripPay(row); recs.forEach(function (r) { delete r.sum; delete r.rate; }); adv = []; adj = []; }
+        var row3 = monthRows(D, m3, function (o) { return canSee(ctx, o); }, true).filter(function (r) { return eq(r.empId, e3.id); })[0];
+        if (!row && row3) { row = row3; if (!paySeen(ctx)) stripPay(row); }
+        return { month: m3, days: dim(m3), today: now.date, emp: info, row: row || null, records: recs, advances: adv, adjustments: adj, hr: hist };
+      }
+
+      case 'dashboard':
+        need(isBoss(ctx), 'Сводка доступна только руководителю');
+        return dashboard(D, p.month || monthOf(now.date), now.date);
+
+      case 'employees':
+        return D.employees.filter(function (e) { return canSee(ctx, e.objectId); }).map(function (e) {
+          var x = JSON.parse(JSON.stringify(e)); if (!paySeen(ctx)) delete x.rate; x.objectName = (objs[e.objectId] || {}).name; return x;
+        });
+
+      case 'saveEmployee': {
+        var boss = isBoss(ctx);
+        var x = p.id ? emp(p.id) : null, isNewE = !x;
+        need(String(p.name || '').trim(), 'Укажите ФИО');
+        var objId = boss ? p.objectId : (x ? x.objectId : ctx.objectId);
+        need(objs[objId], 'Выберите объект');
+        if (isNewE) need(String(p.reason || '').trim(), 'Укажите основание приёма');
+        if (isNewE && p.reason === 'Другое') need(String(p.comment || '').trim(), 'Опишите основание приёма');
+        var canRate = boss || (isNewE && CFG.foremanSetsRate);
+        if (canRate) need(+p.rate > 0, 'Укажите ставку за час');
+        var oldObj = x ? x.objectId : '';
+        x = x || { id: 'E' + store.uid(), active: true, hiredAt: p.date || now.date, dismissedAt: '', dismissReason: '', norm: 8, otk: 1.5, rate: 0 };
+        x.name = String(p.name).trim(); x.position = String(p.position || '').trim(); x.phone = String(p.phone || '').trim();
+        if (canRate) x.rate = +p.rate;
+        if (boss) { x.norm = +p.norm || 8; x.otk = +p.otk || 1.5; }
+        x.objectId = objId;
+        if (isNewE) store.insert('employees', x); else store.update('employees', x);
+        if (isNewE) hrLog(x, 'Принят', p.reason, p.comment, p.date);
+        else if (!eq(oldObj, objId)) hrLog(x, 'Переведён', p.reason || 'Перевод на другой объект',
+          'С объекта «' + ((objs[oldObj] || {}).name || oldObj) + '» на «' + objs[objId].name + '»' + (p.comment ? '. ' + p.comment : ''));
+        return { ok: true, id: x.id };
+      }
+
+      case 'removeEmployee': {
+        var e7 = emp(p.empId);
+        need(e7.active, 'Сотрудник уже удалён из бригады');
+        need(String(p.reason || '').trim(), 'Укажите причину');
+        if (p.reason === 'Другое') need(String(p.comment || '').trim(), 'Опишите причину');
+        var dd = p.date || now.date;
+        e7.active = false; e7.dismissedAt = dd;
+        e7.dismissReason = String(p.reason) + (p.comment ? ': ' + String(p.comment).slice(0, 200) : '');
+        store.update('employees', e7);
+        hrLog(e7, 'Удалён', p.reason, p.comment, dd);
+        return { ok: true };
+      }
+
+      case 'restoreEmployee': {
+        var e8 = emp(p.empId);
+        need(!e8.active, 'Сотрудник и так в бригаде');
+        e8.active = true; e8.dismissedAt = ''; e8.dismissReason = '';
+        if (isBoss(ctx) && p.objectId && objs[p.objectId]) e8.objectId = p.objectId;
+        store.update('employees', e8);
+        hrLog(e8, 'Восстановлен', p.reason || 'Возврат в бригаду', p.comment);
+        return { ok: true };
+      }
+
+      case 'access':
+        need(isBoss(ctx), 'Только руководитель управляет объектами и доступом');
+        return accessView();
+
+      case 'saveObject': {
+        need(isBoss(ctx), 'Только руководитель управляет объектами');
+        need(String(p.name || '').trim(), 'Укажите название объекта');
+        need(!p.shiftStart || isTime(p.shiftStart), 'Начало смены в формате ЧЧ:ММ');
+        var o = p.id ? find(D.objects, function (z) { return eq(z.id, p.id); }) : null, isNewO = !o;
+        if (isNewO) {
+          var nmax = 0; D.objects.forEach(function (z) { var mm = /(\d+)$/.exec(z.id); if (mm && +mm[1] > nmax) nmax = +mm[1]; });
+          o = { id: 'OBJ-' + (nmax + 1) };
+        }
+        o.name = String(p.name).trim(); o.address = String(p.address || '').trim();
+        o.shiftStart = normTime(p.shiftStart || '08:00'); o.active = p.active === undefined ? true : !!p.active;
+        if (isNewO) store.insert('objects', o); else store.update('objects', o);
+        objs[o.id] = o;
+        if (p.foremanTgId) assignUser({ tgId: p.foremanTgId, role: FOREMAN, objectId: o.id, name: p.foremanName });
+        return accessView(o.id);
+      }
+
+      case 'saveUser':
+        need(isBoss(ctx), 'Только руководитель выдаёт доступ');
+        assignUser(p);
+        return accessView();
+
+      case 'removeUser': {
+        need(isBoss(ctx), 'Только руководитель закрывает доступ');
+        need(!eq(p.tgId, ctx.tgId), 'Нельзя закрыть доступ самому себе');
+        var u2 = find(D.users, function (z) { return eq(z.tgId, p.tgId); });
+        need(u2, 'Пользователь не найден');
+        store.remove('users', u2);
+        return accessView();
+      }
+
+      case 'dismissRequest': {
+        need(isBoss(ctx), 'Только руководитель разбирает заявки');
+        var rq = find(D.requests, function (z) { return eq(z.tgId, p.tgId); });
+        if (rq) store.remove('requests', rq);
+        return accessView();
+      }
+
+      case 'addAdvance': {
+        var e4 = emp(p.empId);
+        need(isBoss(ctx) || CFG.foremanGivesAdvance, 'Авансы вносит руководитель');
+        need(+p.amount > 0, 'Укажите сумму аванса');
+        store.insert('advances', { id: store.uid(), date: p.date || now.date, empId: e4.id, empName: e4.name, objectId: e4.objectId,
+          amount: r2(p.amount), comment: String(p.comment || '').slice(0, 200), by: ctx.name });
+        return { ok: true };
+      }
+
+      case 'addAdjustment': {
+        need(isBoss(ctx), 'Премии и удержания вносит руководитель');
+        var e5 = emp(p.empId);
+        need(+p.bonus > 0 || +p.deduction > 0, 'Укажите премию или удержание');
+        store.insert('adjustments', { id: store.uid(), month: p.month || monthOf(now.date), empId: e5.id, empName: e5.name, objectId: e5.objectId,
+          bonus: r2(p.bonus), deduction: r2(p.deduction), comment: String(p.comment || '').slice(0, 200), by: ctx.name });
+        return { ok: true };
+      }
+
+      case 'export': {
+        need(isBoss(ctx) || CFG.foremanCanExport, 'Выгрузка доступна руководителю');
+        var m6 = p.month || monthOf(now.date);
+        var sheets = buildExport(D, m6, visibleFilter(p.objectId), paySeen(ctx));
+        var scope = p.objectId ? ((objs[p.objectId] || {}).name || p.objectId) : (isBoss(ctx) ? 'все объекты' : (objs[ctx.objectId] || {}).name);
+        var title = 'Табель ' + m6 + ' — ' + scope + ' (' + now.date.split('-').reverse().join('.') + ' ' + now.time + ')';
+        return store.exportSheets(title, sheets);
+      }
+    }
+    throw new Error('Неизвестный запрос: ' + action);
+  }
+
+  /* ---------- демо-данные (для показа и для кнопки «Заполнить примером») ---------- */
+  function demoData(today) {
+    var seed = 20260930;
+    function rnd() { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+    function pick(a) { return a[Math.floor(rnd() * a.length)]; }
+    var objects = [
+      { id: 'OBJ-1', name: 'ЖК «Северный», корп. 2', address: 'ул. Лесная, 14', shiftStart: '08:00', active: true },
+      { id: 'OBJ-2', name: 'Склад «Восток»', address: 'Промзона, уч. 7', shiftStart: '08:00', active: true },
+      { id: 'OBJ-3', name: 'Школа № 5, ремонт', address: 'ул. Мира, 3', shiftStart: '09:00', active: true }
+    ];
+    var users = [
+      { tgId: '100', name: 'Иванов Сергей', role: BOSS, objectId: '' },
+      { tgId: '201', name: 'Петров Алексей', role: FOREMAN, objectId: 'OBJ-1' },
+      { tgId: '202', name: 'Сидоров Дмитрий', role: FOREMAN, objectId: 'OBJ-2' },
+      { tgId: '203', name: 'Кузнецов Игорь', role: FOREMAN, objectId: 'OBJ-3' }
+    ];
+    var people = [
+      ['Смирнов Андрей', 'Каменщик', 450], ['Попов Николай', 'Разнорабочий', 300], ['Васильев Олег', 'Электрик', 500],
+      ['Соколов Артём', 'Сварщик', 550], ['Михайлов Роман', 'Разнорабочий', 300], ['Новиков Павел', 'Плиточник', 480],
+      ['Фёдоров Иван', 'Монтажник', 470], ['Морозов Кирилл', 'Разнорабочий', 300], ['Волков Денис', 'Маляр', 400],
+      ['Алексеев Григорий', 'Бетонщик', 430], ['Лебедев Максим', 'Штукатур', 420], ['Семёнов Тимур', 'Электрик', 500],
+      ['Егоров Виктор', 'Кровельщик', 460], ['Павлов Руслан', 'Разнорабочий', 300]
+    ];
+    var objOf = ['OBJ-1', 'OBJ-1', 'OBJ-1', 'OBJ-1', 'OBJ-1', 'OBJ-2', 'OBJ-2', 'OBJ-2', 'OBJ-2', 'OBJ-3', 'OBJ-3', 'OBJ-3', 'OBJ-3', 'OBJ-3'];
+    var employees = people.map(function (p, i) {
+      return { id: 'E' + pad(i + 1), name: p[0], position: p[1], objectId: objOf[i], rate: p[2], norm: 8, otk: 1.5,
+        phone: '+7 900 000-00-' + pad(i + 1), active: true, hiredAt: '2026-03-02', dismissedAt: '', dismissReason: '' };
+    });
+    var curM = monthOf(today), tDay = +today.slice(8, 10);
+    var hireDay = curM + '-' + pad(Math.min(8, tDay)), fireDay = curM + '-' + pad(Math.min(12, tDay));
+    employees[13].hiredAt = hireDay;
+    employees.push({ id: 'E15', name: 'Гусев Олег', position: 'Разнорабочий', objectId: 'OBJ-2', rate: 300, norm: 8, otk: 1.5,
+      phone: '+7 900 000-00-15', active: false, hiredAt: '2026-05-12', dismissedAt: fireDay, dismissReason: 'Уволился по собственному желанию: переезд в другой город' });
+    var hr = [
+      { id: 'H1', date: hireDay, empId: 'E14', empName: 'Павлов Руслан', objectId: 'OBJ-3', action: 'Принят', reason: 'Замена выбывшего', comment: '', by: 'Кузнецов Игорь' },
+      { id: 'H2', date: fireDay, empId: 'E15', empName: 'Гусев Олег', objectId: 'OBJ-2', action: 'Удалён', reason: 'Уволился по собственному желанию', comment: 'Переезд в другой город', by: 'Сидоров Дмитрий' },
+      { id: 'H3', date: addMonths(curM, -1) + '-20', empId: 'E12', empName: 'Семёнов Тимур', objectId: 'OBJ-3', action: 'Переведён', reason: 'Перевод на другой объект', comment: 'С объекта «Склад «Восток»» на «Школа № 5, ремонт»', by: 'Иванов Сергей' }
+    ];
+    var requests = [
+      { tgId: '5012345678', name: 'Орлов Павел', username: 'orlov_pavel', date: today + ' 09:14' },
+      { tgId: '6023456789', name: 'Ким Артур', username: '', date: addDays(today, -1) + ' 18:40' }
+    ];
+    var objs = mapBy(objects);
+    var records = [], advances = [], adjustments = [];
+    var startMonth = addMonths(monthOf(today), -1), start = startMonth + '-01';
+    var sick = { E05: [9, 13], E11: [22, 26] };
+    for (var d = start; d <= today; d = addDays(d, 1)) {
+      var wd = dow(d), inCur = monthOf(d) === monthOf(today), dn = +d.slice(8, 10);
+      employees.forEach(function (e, i) {
+        if (d < e.hiredAt || (e.dismissedAt && d >= e.dismissedAt)) return;
+        var o = objs[e.objectId], st = 'Явка';
+        if (wd === 0) st = 'Выходной';
+        if (wd === 6 && i % 3 === 0) st = 'Выходной';
+        if (inCur && sick[e.id] && dn >= sick[e.id][0] && dn <= sick[e.id][1]) st = 'Больничный';
+        if (inCur && e.id === 'E08' && (dn === 4 || dn === 18)) st = 'Прогул';
+        if (e.id === 'E13' && monthOf(d) === startMonth && dn >= 11 && dn <= 24) st = 'Отпуск';
+        if (st === 'Явка' && rnd() < 0.015) st = 'Прогул';
+        var rec = { id: 'R' + records.length, date: d, empId: e.id, empName: e.name, objectId: e.objectId, status: st, in: '', out: '',
+          lunch: 60, rate: e.rate, norm: 8, otk: 1.5, by: 'демо', updated: '' };
+        if (st === 'Явка') {
+          var base = mins(o.shiftStart), lateP = e.id === 'E02' || e.id === 'E08' ? 0.35 : 0.08;
+          var inM = base - 5 + Math.floor(rnd() * 8) + (rnd() < lateP ? 8 + Math.floor(rnd() * 35) : 0);
+          var otP = e.objectId === 'OBJ-1' ? 0.3 : 0.12;
+          var ot = rnd() < otP ? pick([60, 90, 120, 150, 180]) : 0;
+          var outM = ot ? inM + 9 * 60 + ot : base + 9 * 60 - pick([0, 0, 0, 5, 10]);
+          rec.in = pad(Math.floor(inM / 60)) + ':' + pad(inM % 60);
+          if (d === today) {
+            if (i % 5 === 4) return;                 // ещё не отмечен
+            rec.out = '';                             // на объекте
+          } else rec.out = pad(Math.floor(outM / 60)) + ':' + pad(outM % 60);
+        } else if (d === today) return;
+        records.push(calcRecord(rec, o));
+      });
+    }
+    employees.forEach(function (e, i) {
+      if (i % 4 !== 3) advances.push({ id: 'A' + i, date: startMonth + '-16', empId: e.id, empName: e.name, objectId: e.objectId, amount: pick([8000, 10000, 12000, 15000]), comment: 'Аванс', by: 'демо' });
+      if (+today.slice(8, 10) >= 16 && i % 3 !== 2)
+        advances.push({ id: 'B' + i, date: monthOf(today) + '-16', empId: e.id, empName: e.name, objectId: e.objectId, amount: pick([8000, 10000, 12000, 15000]), comment: 'Аванс', by: 'демо' });
+    });
+    adjustments.push({ id: 'J1', month: monthOf(today), empId: 'E04', empName: 'Соколов Артём', objectId: 'OBJ-1', bonus: 5000, deduction: 0, comment: 'За сварку каркаса досрочно', by: 'демо' });
+    adjustments.push({ id: 'J2', month: monthOf(today), empId: 'E08', empName: 'Морозов Кирилл', objectId: 'OBJ-2', bonus: 0, deduction: 2000, comment: 'Потерянный инструмент', by: 'демо' });
+    return { objects: objects, users: users, employees: employees, records: records, advances: advances, adjustments: adjustments, hr: hr, requests: requests };
+  }
+
+  return { VERSION: VERSION, handle: handle, calcRecord: calcRecord, monthRows: monthRows, dashboard: dashboard, buildExport: buildExport,
+    demoData: demoData, registerRequest: registerRequest, HIRE_REASONS: HIRE_REASONS, FIRE_REASONS: FIRE_REASONS, STATUSES: STATUSES, CODE: CODE, BOSS: BOSS, FOREMAN: FOREMAN, CFG: CFG,
+    util: { pad: pad, dim: dim, addDays: addDays, addMonths: addMonths, dow: dow, monthOf: monthOf, mins: mins } };
+})();
+
+</script>
+<script>
+(function () {
+'use strict';
+/* ===== Настройка: адрес сервера (Apps Script → Развернуть → URL веб-приложения) ===== */
+var API_URL = 'https://script.google.com/macros/s/AKfycbwImIPZmiWsb_ib897yQ9QO8VD28Z9h7uSp0ZisH0Hdms_w-ZBPdGiEdfVqa3CPW9AB0g/exec'; // ← вставьте сюда URL веб-приложения Apps Script (заканчивается на /exec)
+
+var tg = window.Telegram && window.Telegram.WebApp;
+var IN_TG = !!(tg && tg.initData);
+var DEMO = false;
+var S = { init: null, tab: null, date: null, month: null, obj: '', staffQ: '', pageFn: null, seq: 0, offset: 0 };
+var $ = function (s, r) { return (r || document).querySelector(s); };
+
+/* ---------- формат ---------- */
+var MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+var MONTHS_G = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+var DOW = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+var DOW_F = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+var nf0 = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
+var nf1 = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 });
+function money(v) { return nf0.format(Math.round(+v || 0)) + ' ₽'; }
+function hrs(v) { return nf1.format(+v || 0) + ' ч'; }
+function pct(v) { return nf0.format((+v || 0) * 100) + ' %'; }
+function compact(v) { v = +v || 0; if (Math.abs(v) >= 1e6) return nf1.format(v / 1e6) + ' млн'; if (Math.abs(v) >= 1e3) return nf0.format(v / 1e3) + ' тыс'; return nf0.format(v); }
+function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+function fmtMonth(m) { return cap(MONTHS[+m.slice(5, 7) - 1]) + ' ' + m.slice(0, 4); }
+function fmtMonthG(m) { return MONTHS_G[+m.slice(5, 7) - 1]; }
+function fmtDay(d) { return DOW_F[Core.util.dow(d)] + ', ' + (+d.slice(8, 10)) + ' ' + MONTHS_G[+d.slice(5, 7) - 1]; }
+function fmtShort(d) { return DOW[Core.util.dow(d)] + ' ' + d.slice(8, 10) + '.' + d.slice(5, 7); }
+function fdate(d) { return d ? String(d).slice(0, 10).split('-').reverse().join('.') : ''; }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function plural(n, a, b, c) { n = Math.abs(n) % 100; var n1 = n % 10; if (n > 10 && n < 20) return c; if (n1 > 1 && n1 < 5) return b; if (n1 === 1) return a; return c; }
+
+/* ---------- иконки ---------- */
+var I = {
+  dash: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  today: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  sheet: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 4v17M3 14h18"/>',
+  staff: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5M16 4.8a3.5 3.5 0 0 1 0 6.4M18.5 14.8c1.6.8 2.6 2.5 3 5.2"/>',
+  pay: '<rect x="2.5" y="6" width="19" height="13" rx="2"/><path d="M2.5 10h19M6.5 15h4"/>',
+  back: '<path d="M15 5l-7 7 7 7"/>',
+  refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/>',
+  export: '<path d="M12 3v12M7 10l5 5 5-5M4 20h16"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  alert: '<path d="M12 8v5M12 16.5v.5"/><circle cx="12" cy="12" r="9"/>',
+  x: '<path d="M7 7l10 10M17 7L7 17"/>',
+  site: '<path d="M4 20V9l8-5 8 5v11M9 20v-6h6v6"/>',
+  team: '<path d="M3 21V10l6-4 6 4v11M9 21v-5M15 12l6 3v6M1 21h22"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  undo: '<path d="M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>'
+};
+function ic(n) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + I[n] + '</svg>'; }
+
+/* ---------- сеть ---------- */
+var READS = ['init', 'day', 'month', 'employee', 'dashboard', 'employees', 'access'];
+function rid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 9); }
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function netErr(msg) { var e = new Error(msg); e.net = true; return e; }
+function apiOnce(action, params, id, timeoutMs) {
+  var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null, timer = null;
+  if (ctl) timer = setTimeout(function () { ctl.abort(); }, timeoutMs);
+  return fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, signal: ctl ? ctl.signal : undefined,
+    body: JSON.stringify({ initData: tg.initData, action: action, params: params || {}, rid: id || undefined }) })
+    .then(function (r) { return r.text(); }, function (e) {
+      throw netErr(e && e.name === 'AbortError' ? 'Сервер долго не отвечает' : navigator.onLine === false ? 'Нет интернета' : 'Нет связи с сервером'); })
+    .then(function (t) {
+      if (timer) clearTimeout(timer);
+      try { return JSON.parse(t); } catch (x) { throw netErr('Сервер ответил не так, как ожидалось'); }
+    }, function (e) { if (timer) clearTimeout(timer); throw e; })
+    .then(function (j) {
+      if (!j.ok) { var e = new Error(j.error || 'Ошибка сервера'); e.busy = !!j.busy; throw e; }
+      if (j.unknown) { renderUnknown(j); var u = new Error('unknown'); u.silent = true; throw u; }
+      return j.data;
+    });
+}
+/* Каждый запрос: тайм-аут и до 3 попыток. Запись несёт уникальный номер (rid),
+   поэтому повтор после обрыва не создаст дубль — сервер вернёт уже готовый ответ. */
+function api(action, params, opts) {
+  if (DEMO) return Demo.call(action, params || {});
+  opts = opts || {};
+  var id = READS.indexOf(action) < 0 ? (opts.rid || rid()) : '';
+  var tries = 0, max = opts.tries || 3, tmo = action === 'export' ? 120000 : 30000;
+  function attempt() {
+    return apiOnce(action, params, id, tmo).then(function (d) { if (id) forget(); return d; }, function (e) {
+      if ((e.net || e.busy) && ++tries < max && navigator.onLine !== false) return wait(1200 * tries).then(attempt);
+      throw e;
+    });
+  }
+  return attempt();
+}
+
+/* ---------- сохранённые ответы: экран показывается сразу, свежие данные подгружаются следом ---------- */
+var MEM = {};
+function cpre() { var u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user; return 'tb:' + (u ? u.id : 'x') + ':'; }
+function ckey(a, p) { return a + '|' + JSON.stringify(p || {}); }
+function cget(k) {
+  if (DEMO) return null;
+  if (MEM[k]) return MEM[k];
+  try { var v = localStorage.getItem(cpre() + k); if (v) return (MEM[k] = JSON.parse(v)); } catch (e) {}
+  return null;
+}
+function cput(k, d) {
+  if (DEMO) return;
+  var e = { t: Date.now(), d: d }; MEM[k] = e;
+  try { localStorage.setItem(cpre() + k, JSON.stringify(e)); }
+  catch (x) { try { Object.keys(localStorage).forEach(function (kk) { if (kk.indexOf('tb:') === 0 && kk.indexOf('queue') < 0) localStorage.removeItem(kk); }); } catch (y) {} }
+}
+function spin(on) { var b = $('#bRefresh'); if (b) b.classList.toggle('spin', !!on); }
+function load(action, params, draw) {
+  var seq = ++S.seq, k = ckey(action, params), c = cget(k);
+  if (c) draw(c.d); else loading();
+  if (c && Date.now() - c.t < 15000) return;                  // только что обновлялось — не дёргаем сервер
+  spin(true);
+  api(action, params).then(function (d) {
+    if (seq !== S.seq) return;
+    spin(false); cput(k, d); draw(d);
+  }).catch(function (e) {
+    if (seq !== S.seq) return;
+    spin(false);
+    if (e.silent) return;
+    if (c) toast(navigator.onLine === false ? 'Нет интернета — показаны сохранённые данные' : 'Не удалось обновить: ' + e.message);
+    else errorView(e);
+  });
+}
+function forget(action) { Object.keys(MEM).forEach(function (k) { if (!action || k.indexOf(action + '|') === 0) MEM[k].t = 0; }); }
+
+/* ---------- очередь отметок: работает и без связи ---------- */
+var Q = { items: [], busy: false, timer: null };
+function qKey() { return cpre() + 'queue'; }
+function qLoad() { try { Q.items = JSON.parse(localStorage.getItem(qKey()) || '[]'); } catch (e) { Q.items = []; } }
+function qSave() {
+  try { localStorage.setItem(qKey(), JSON.stringify(Q.items)); } catch (e) {}
+  try { if (tg) { if (Q.items.length) tg.enableClosingConfirmation(); else tg.disableClosingConfirmation(); } } catch (e) {}
+  var bar = $('#qbar'); if (bar) qBar(bar);
+}
+function serverNow() {
+  var d = new Date(Date.now() + (S.offset || 0)), p = Core.util.pad;
+  return { date: d.getUTCFullYear() + '-' + p(d.getUTCMonth() + 1) + '-' + p(d.getUTCDate()), time: p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()) };
+}
+function applyItem(day, it) {
+  if (!day || day.date !== it.date) return;
+  var objs = {}; (S.init.objects || []).forEach(function (o) { objs[o.id] = o; });
+  day.rows.forEach(function (r) {
+    if (it.empIds.indexOf(r.emp.id) < 0) return;
+    var rec = r.rec ? JSON.parse(JSON.stringify(r.rec)) : { status: 'Явка', in: '', out: '', lunch: 60, norm: 8, rate: 0, otk: 1 };
+    if (it.action === 'in') { if (rec.status === 'Явка' && rec.in) return; rec.status = 'Явка'; rec.in = it.time || serverNow().time; rec.out = ''; }
+    else if (it.action === 'out') { if (!rec.in || rec.out) return; rec.out = it.time || serverNow().time; }
+    Core.calcRecord(rec, objs[r.emp.objectId]); rec._pending = true; r.rec = rec;
+  });
+  var s = { total: day.rows.length, present: 0, onSite: 0, left: 0, late: 0, unmarked: 0, absent: 0, other: 0 };
+  day.rows.forEach(function (x) { var r = x.rec;
+    if (!r) s.unmarked++; else if (r.status === 'Явка') { s.present++; if (r.in && !r.out) s.onSite++; if (r.out) s.left++; if (r.late) s.late++; }
+    else if (r.status === 'Прогул') s.absent++; else s.other++; });
+  day.summary = s;
+}
+function withPending(d) {
+  var list = Q.items.filter(function (it) { return it.date === d.date; });
+  if (!list.length) return d;
+  d = JSON.parse(JSON.stringify(d)); list.forEach(function (it) { applyItem(d, it); }); return d;
+}
+function qBar(el) {
+  var n = Q.items.length;
+  el.hidden = !n;
+  if (n) el.innerHTML = '<div class="notice" style="border-color:var(--warn);background:var(--warn-bg);display:flex;gap:10px;align-items:center"><span style="flex:1">' +
+    (navigator.onLine === false ? 'Нет интернета. ' : '') + 'Ждут отправки: <b>' + n + '</b> ' + plural(n, 'отметка', 'отметки', 'отметок') + '. Отправятся сами, когда появится связь.</span><button class="btn sm sec" id="qNow">Отправить</button></div>';
+  var b = $('#qNow'); if (b) b.onclick = function () { qRun(true); };
+}
+function qRun(manual) {
+  if (DEMO || Q.busy || !Q.items.length) return;
+  Q.busy = true; clearTimeout(Q.timer);
+  var it = Q.items[0];
+  var p = { empIds: it.empIds, action: it.action, date: it.date, objectId: it.objectId };
+  if (it.time) p.time = it.time;
+  if (Date.now() - it.at > 90000) p.offline = true;
+  api('mark', p, { rid: it.rid, tries: 2 }).then(function (d) {
+    Q.busy = false; Q.items.shift(); qSave();
+    var k = ckey('day', { date: d.date, objectId: it.objectId }); cput(k, d);
+    if (S.tab === 'today' && S.date === d.date && $('#sheet').hidden) drawDay(d);
+    if (Q.items.length) qRun(); else if (manual) toast('Все отметки отправлены');
+  }).catch(function (e) {
+    Q.busy = false;
+    if (e.net || e.busy) { Q.timer = setTimeout(qRun, 15000); if (manual) toast(e.message); qSave(); return; }
+    Q.items.shift(); qSave(); haptic('error'); toast('Отметка не принята: ' + e.message);
+    if (S.tab === 'today') renderToday();
+    if (Q.items.length) qRun();
+  });
+}
+window.addEventListener('online', function () { qRun(); });
+window.addEventListener('offline', function () { qSave(); });
+
+/* ---------- демо: та же логика, данные в памяти ---------- */
+var Demo = (function () {
+  var D = null, role = '100';
+  function now() { var d = new Date(), p = Core.util.pad; return { date: d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()), time: p(d.getHours()) + ':' + p(d.getMinutes()) }; }
+  function data() { if (!D) D = Core.demoData(now().date); return D; }
+  var n = 0;
+  function store() { return { data: data(), now: now, uid: function () { return 'd' + Date.now().toString(36) + (n++); },
+    insert: function (t, o) { D[t].push(o); }, update: function () {},
+    remove: function (t, o) { var i = D[t].indexOf(o); if (i >= 0) D[t].splice(i, 1); },
+    exportSheets: function (title, sheets) { return { demo: true, title: title, sheets: sheets }; } }; }
+  function ctx() { var u = data().users.filter(function (x) { return x.tgId === role; })[0]; return { tgId: u.tgId, name: u.name, role: u.role, objectId: u.objectId }; }
+  return {
+    call: function (a, p) { return new Promise(function (res, rej) { setTimeout(function () {
+      try { res(JSON.parse(JSON.stringify(Core.handle(a, p, ctx(), store())))); } catch (e) { rej(e); } }, 90); }); },
+    users: function () { return data().users; }, objects: function () { return data().objects; },
+    setRole: function (r) { role = r; }, role: function () { return role; }
+  };
+})();
+
+/* ---------- общие элементы ---------- */
+var toastT;
+function toast(msg) { var t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(function () { t.hidden = true; }, 2600); }
+function haptic(kind) { try { tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred(kind || 'success'); } catch (e) {} }
+function fail(e) { if (e && e.silent) return; toast(e && e.message ? e.message : 'Что-то пошло не так'); haptic('error'); }
+function openLink(url) { if (IN_TG && tg.openLink) tg.openLink(url); else window.open(url, '_blank'); }
+
+function openSheet(html, onMount) {
+  var sh = $('#sheet'); sh.innerHTML = '<div class="grab"></div><div class="wrap">' + html + '</div>';
+  sh.hidden = false; $('#scrim').hidden = false;
+  if (onMount) onMount(sh);
+}
+function closeSheet() { $('#sheet').hidden = true; $('#scrim').hidden = true; $('#sheet').innerHTML = ''; }
+$('#scrim').addEventListener('click', closeSheet);
+
+function objColor(id) {
+  var list = (S.init && S.init.objects) || [];
+  var i = list.findIndex(function (o) { return o.id === id; });
+  return 'var(--s' + ((i < 0 ? 0 : i) % 8 + 1) + ')';
+}
+function objName(id) { var o = ((S.init && S.init.objects) || []).filter(function (x) { return x.id === id; })[0]; return o ? o.name : id; }
+
+function statusChip(rec) {
+  if (!rec) return '<span class="chip">Не отмечен</span>';
+  if (rec.status === 'Явка') {
+    if (rec.in && !rec.out) return rec.late ? '<span class="chip warn">' + ic('alert') + 'Опоздал на ' + rec.late + ' мин</span>' : '<span class="chip good">' + ic('site') + 'На объекте</span>';
+    return rec.late ? '<span class="chip warn">' + ic('alert') + 'Опоздание ' + rec.late + ' мин</span>' : '<span class="chip good">' + ic('check') + 'Отработал</span>';
+  }
+  if (rec.status === 'Прогул') return '<span class="chip crit">' + ic('x') + 'Прогул</span>';
+  return '<span class="chip"><span class="code">' + Core.CODE[rec.status] + '</span>' + esc(rec.status) + '</span>';
+}
+
+/* ---------- каркас ---------- */
+function tabsFor() {
+  var me = S.init.me, c = S.init.config;
+  if (me.isBoss) return [['dash', 'Обзор', 'dash'], ['today', 'Сегодня', 'today'], ['sheet', 'Табель', 'sheet'], ['staff', 'Люди', 'staff'], ['team', 'Объекты', 'team']];
+  return [['today', 'Сегодня', 'today'], ['sheet', 'Табель', 'sheet'], ['pay', 'Бригада', 'staff']];
+}
+function renderTabs() {
+  var nav = $('#tabs'); nav.hidden = false;
+  nav.firstElementChild.innerHTML = tabsFor().map(function (t) {
+    return '<button data-tab="' + t[0] + '"' + (S.tab === t[0] ? ' aria-current="page"' : '') + '>' + ic(t[2]) + '<span>' + t[1] + '</span>' +
+      (t[0] === 'team' && S.init.pendingRequests ? '<span class="badge" aria-label="Новые заявки">' + S.init.pendingRequests + '</span>' : '') + '</button>';
+  }).join('');
+  nav.querySelectorAll('button').forEach(function (b) { b.onclick = function () { go(b.dataset.tab); }; });
+}
+function go(tab) { S.tab = tab; renderTabs(); render(); window.scrollTo(0, 0); }
+
+function topBar(title, opts) {
+  opts = opts || {};
+  var me = S.init.me, sub = me.isBoss ? (opts.noObj ? 'Все объекты' : '') : objName(me.objectId);
+  var h = '<div class="title-row"><h1>' + title + '</h1><div class="sub">' + esc(sub) + '</div>' +
+    (opts.export ? '<button class="icon-btn" id="bExport" title="Выгрузить в Google Таблицу" aria-label="Выгрузить в Google Таблицу">' + ic('export') + '</button>' : '') +
+    '<button class="icon-btn" id="bRefresh" title="Обновить" aria-label="Обновить">' + ic('refresh') + '</button></div><div class="ctrl-row">';
+  if (opts.date) {
+    h += '<div class="stepper"><button id="dPrev" aria-label="Предыдущий день">‹</button><span>' + fmtDay(S.date) + '</span><button id="dNext" aria-label="Следующий день"' + (S.date >= S.init.today ? ' disabled' : '') + '>›</button></div>';
+  }
+  if (opts.month) {
+    h += '<div class="stepper"><button id="mPrev" aria-label="Предыдущий месяц">‹</button><span>' + fmtMonth(S.month) + '</span><button id="mNext" aria-label="Следующий месяц"' + (S.month >= Core.util.monthOf(S.init.today) ? ' disabled' : '') + '>›</button></div>';
+  }
+  if (me.isBoss && !opts.noObj) {
+    h += '<select class="sel" id="objSel" aria-label="Объект"><option value="">Все объекты</option>' + S.init.objects.map(function (o) {
+      return '<option value="' + esc(o.id) + '"' + (S.obj === o.id ? ' selected' : '') + '>' + esc(o.name) + '</option>'; }).join('') + '</select>';
+  }
+  h += '</div>';
+  var top = $('#top .wrap'); top.innerHTML = h;
+  var on = function (id, f) { var b = $('#' + id); if (b) b.onclick = f; };
+  on('dPrev', function () { S.date = Core.util.addDays(S.date, -1); render(); });
+  on('dNext', function () { S.date = Core.util.addDays(S.date, 1); render(); });
+  on('mPrev', function () { S.month = Core.util.addMonths(S.month, -1); render(); });
+  on('mNext', function () { S.month = Core.util.addMonths(S.month, 1); render(); });
+  on('bRefresh', function () { render(); });
+  on('bExport', doExport);
+  var sel = $('#objSel'); if (sel) sel.onchange = function () { S.obj = sel.value; render(); };
+}
+
+function loading() { $('#view').innerHTML = '<div class="empty">Загрузка…</div>'; }
+function errorView(e) {
+  if (e && e.silent) return;
+  if (e && (e.busy || navigator.onLine === false || e.message === 'Сервер долго не отвечает')) {
+    $('#view').innerHTML = '<div class="card empty" style="margin-top:12px"><p>' + esc(navigator.onLine === false ? 'Нет интернета. Отметки «Пришёл/Ушёл» можно ставить и так — они отправятся, когда появится связь.' : e.message) + '</p><button class="btn sec" id="retry">Повторить</button></div>';
+    $('#retry').onclick = function () { S.init ? render() : boot(); };
+    return;
+  }
+  if (e && e.net) {
+    $('#view').innerHTML = '<div class="card" style="margin-top:12px"><h3 style="margin:0 0 8px">' + esc(e.message) + '</h3>' +
+      '<div class="muted" style="font-size:14px">Обычно это настройка сервера, а не интернет. Проверьте по порядку:</div><ol style="font-size:14px;padding-left:20px;display:grid;gap:6px">' +
+      '<li>Apps Script → «Начать развертывание» → «Управление развертываниями»: тип «Веб-приложение», «Запуск от имени: Я», «Кто имеет доступ: <b>Все</b>» (не «Все, у кого есть аккаунт Google»).</li>' +
+      '<li>В index.html адрес должен начинаться с https://script.google.com/macros/s/ и заканчиваться на <b>/exec</b> (не /dev).</li>' +
+      '<li>Откройте этот адрес в обычном браузере: должна появиться строка «Табель: сервер работает». Если просит войти или показывает ошибку — дело в пункте 1 или 4.</li>' +
+      '<li>После правки Code.gs нужна новая версия: «Управление развертываниями» → карандаш → «Новая версия» → «Развернуть».</li></ol>' +
+      '<div class="hint num" style="font-size:12px;word-break:break-all">Адрес сервера сейчас: ' + esc(API_URL || '(не указан)') + '</div>' +
+      '<button class="btn sec" id="retry" style="margin-top:10px">Повторить</button></div>';
+    $('#retry').onclick = function () { boot(); };
+    return;
+  }
+  $('#view').innerHTML = '<div class="empty"><p>' + esc(e.message || 'Ошибка') + '</p><button class="btn sec" id="retry">Повторить</button></div>';
+  $('#retry').onclick = render;
+}
+
+function render() {
+  closeSheet();
+  var t = S.tab;
+  if (t === 'dash') return renderDash();
+  if (t === 'today') return renderToday();
+  if (t === 'sheet') return renderSheet();
+  if (t === 'staff' || t === 'pay') return renderStaff();
+  if (t === 'team') return renderTeam();
+}
+
+/* ================= ОБЗОР (руководитель) ================= */
+function renderDash() {
+  topBar('Обзор', { month: true, noObj: true, export: true }); loading();
+  load('dashboard', { month: S.month }, function (d) {
+    var t = d.totals, mg = fmtMonthG(d.month);
+    var prevLbl = d.isCurrent ? '1–' + d.lastDay + ' ' + fmtMonthG(Core.util.addMonths(d.month, -1)) : fmtMonth(Core.util.addMonths(d.month, -1)).toLowerCase();
+    var delta = t.prevSum ? (t.sum - t.prevSum) / t.prevSum : null;
+    var h = '<div class="stack">';
+    h += '<div class="card hero"><div class="lbl">Начислено за ' + (d.isCurrent ? '1–' + d.lastDay + ' ' + mg : fmtMonth(d.month).toLowerCase()) + '</div>' +
+      '<div class="big">' + money(t.sum) + '</div>' +
+      (delta === null ? '<div class="delta">Нет данных за прошлый месяц для сравнения</div>' :
+        '<div class="delta"><b>' + (delta >= 0 ? '+' : '−') + nf1.format(Math.abs(delta * 100)) + ' %</b> к ' + prevLbl + ' (' + money(t.prevSum) + ')</div>') + '</div>';
+    if (d.isCurrent) {
+      h += '<div class="card"><h2>Сегодня</h2><div class="strip">' +
+        '<span><i class="dot" style="background:var(--good)"></i>Вышли <b>' + t.presentToday + '</b> из ' + t.headcount + '</span>' +
+        '<span><i class="dot" style="background:var(--s1)"></i>На объекте сейчас <b>' + t.onSite + '</b></span>' +
+        '<span><i class="dot" style="background:var(--warn)"></i>Опоздали <b>' + t.lateToday + '</b></span></div></div>';
+    }
+    h += '<div class="tiles">' +
+      tile('К выплате', money(t.toPay), 'после авансов ' + money(t.advance)) +
+      tile('Часов отработано', hrs(t.hours), 'в среднем ' + hrs(t.avgHours) + ' в день') +
+      tile('Сверхурочные', hrs(t.ot), pct(t.otShare) + ' от всех часов') +
+      tile('Явка', pct(t.attendance), t.absent + ' ' + plural(t.absent, 'прогул', 'прогула', 'прогулов')) +
+      tile('Опоздания', String(t.late), 'за месяц') +
+      tile('Средняя цена часа', money(t.avgRate), t.manDays + ' чел.-дней') + '</div>';
+    h += '<div class="card"><h2>Начисления по дням</h2><div class="legend">' + d.objects.map(function (o) {
+      return '<span><i style="background:' + objColor(o.id) + '"></i>' + esc(o.name) + '</span>'; }).join('') + '</div><div class="chart" id="chDaily"></div></div>';
+    h += '<div class="card"><h2>Объекты</h2><div class="stack">' + d.objects.map(function (o) {
+      var share = o.headcount ? o.presentToday / o.headcount : 0;
+      return '<div class="obj" data-obj="' + esc(o.id) + '" role="button" tabindex="0">' +
+        '<div class="obj-head"><i class="sw" style="background:' + objColor(o.id) + '"></i><span class="n">' + esc(o.name) + '</span>' +
+        '<span class="muted" style="font-size:13px">' + (d.isCurrent ? 'сегодня <b class="num">' + o.presentToday + '/' + o.headcount + '</b>' : o.headcount + ' чел.') + '</span></div>' +
+        (d.isCurrent ? '<div class="meter"><i style="width:' + Math.round(share * 100) + '%"></i></div>' : '') +
+        '<div class="kv"><div><div class="l">Начислено</div><div class="v">' + compact(o.sum) + '</div></div>' +
+        '<div><div class="l">Часов</div><div class="v">' + nf0.format(o.hours) + '</div></div>' +
+        '<div><div class="l">Сверх, ч</div><div class="v">' + nf0.format(o.ot) + '</div></div>' +
+        '<div><div class="l">Опозданий</div><div class="v">' + o.late + '</div></div></div>' +
+        '<div class="hint" style="font-size:12px">Бригадир: ' + esc(o.foreman || 'не назначен') + (o.lateToday ? ' · сегодня опоздали ' + o.lateToday : '') + '</div></div>';
+    }).join('<div style="height:1px;background:var(--line)"></div>') + '</div></div>';
+    var hr = d.hr || { hired: 0, dismissed: 0, transferred: 0, events: [] };
+    h += '<div class="card"><h2>Кадры за месяц</h2><div class="strip" style="margin-bottom:6px"><span><i class="dot" style="background:var(--good)"></i>Принято <b>' + hr.hired + '</b></span><span><i class="dot" style="background:var(--crit)"></i>Удалено <b>' + hr.dismissed + '</b></span><span><i class="dot" style="background:var(--accent)"></i>Переведено <b>' + hr.transferred + '</b></span></div>' +
+      (hr.events.length ? '<div class="list">' + hr.events.slice(0, 6).map(hrRow).join('') + '</div>' : '<div class="hint">Изменений в составе не было</div>') + '</div>';
+    h += rankCard('Больше всего сверхурочных', d.topOT, function (x) { return hrs(x.value); }, function (x) { return 'начислено ' + money(x.extra); });
+    h += rankCard('Чаще опаздывают', d.topLate, function (x) { return x.value + ' ' + plural(x.value, 'раз', 'раза', 'раз'); }, function (x) { return 'всего ' + x.extra + ' мин'; });
+    if (d.topAbsent.length) h += rankCard('Прогулы', d.topAbsent, function (x) { return x.value + ' ' + plural(x.value, 'день', 'дня', 'дней'); }, function () { return ''; });
+    var stTotal = Object.keys(d.status).reduce(function (s, k) { return s + d.status[k]; }, 0) || 1;
+    h += '<div class="card"><h2>Отметки за месяц</h2><div class="list rank">' + Core.STATUSES.map(function (s) {
+      var v = d.status[s.id] || 0;
+      return '<div class="row"><div class="main"><div class="name"><span class="code">' + s.code + '</span> · ' + s.id + '</div><div class="bar"><i style="width:' + (v / stTotal * 100) + '%;background:' + (s.id === 'Прогул' ? 'var(--crit)' : 'var(--muted)') + '"></i></div></div><div class="side"><div class="v">' + v + '</div><div class="s">' + nf0.format(v / stTotal * 100) + ' %</div></div></div>';
+    }).join('') + '</div></div>';
+    h += '<button class="btn sec block" id="bExport2">' + ic('export') + 'Выгрузить отчёт за ' + fmtMonth(d.month).toLowerCase() + ' в Google Таблицу</button>';
+    h += '</div>';
+    $('#view').innerHTML = h;
+    dailyChart($('#chDaily'), d);
+    $('#view').querySelectorAll('[data-obj]').forEach(function (el) { el.onclick = function () { S.obj = el.dataset.obj; S.date = S.init.today; go('today'); }; });
+    $('#view').querySelectorAll('[data-emp]').forEach(function (el) { el.onclick = function () { openEmployee(el.dataset.emp); }; });
+    $('#bExport2').onclick = doExport;
+  });
+}
+function tile(l, v, n) { return '<div class="tile"><div class="lbl">' + l + '</div><div class="val">' + v + '</div><div class="note">' + n + '</div></div>'; }
+function rankCard(title, list, val, sub) {
+  if (!list.length) return '<div class="card"><h2>' + title + '</h2><div class="hint">За этот месяц нет</div></div>';
+  var max = Math.max.apply(null, list.map(function (x) { return x.value; })) || 1;
+  return '<div class="card"><h2>' + title + '</h2><div class="list rank">' + list.map(function (x) {
+    return '<div class="row tap" data-emp="' + esc(x.empId) + '"><div class="main"><div class="name">' + esc(x.name) + '</div><div class="meta">' + esc(x.objectName) + (sub(x) ? ' · ' + sub(x) : '') + '</div><div class="bar"><i style="width:' + (x.value / max * 100) + '%"></i></div></div><div class="side"><div class="v">' + val(x) + '</div></div></div>';
+  }).join('') + '</div></div>';
+}
+
+/* ---------- графики ---------- */
+function niceStep(max, n) {
+  var raw = max / n, p = Math.pow(10, Math.floor(Math.log10(raw || 1))), m = raw / p;
+  return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * p;
+}
+function barPath(x, y, w, h, r) {
+  if (h <= 0) return ''; r = Math.min(r, w / 2, h);
+  return 'M' + x + ',' + (y + h) + 'V' + (y + r) + 'Q' + x + ',' + y + ' ' + (x + r) + ',' + y + 'H' + (x + w - r) + 'Q' + (x + w) + ',' + y + ' ' + (x + w) + ',' + (y + r) + 'V' + (y + h) + 'Z';
+}
+function columnChart(box, cfg) {
+  // cfg: n, stacks(i) -> [{v,color,label}], label(i), tip(i) -> html, refLine, fmtAxis, ticks
+  function draw() {
+    var W = Math.max(280, box.clientWidth), H = cfg.height || 190, L = 44, R = 6, T = 8, B = 22;
+    var pw = W - L - R, ph = H - T - B, band = pw / cfg.n, bw = Math.max(3, Math.min(18, band * 0.64));
+    var max = 0; for (var i = 0; i < cfg.n; i++) { var s = cfg.stacks(i).reduce(function (a, x) { return a + x.v; }, 0); if (s > max) max = s; }
+    if (cfg.refLine) max = Math.max(max, cfg.refLine * 1.15);
+    var step = niceStep(max || 1, 4), top = Math.ceil((max || 1) / step) * step, y = function (v) { return T + ph - v / top * ph; };
+    var g = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(cfg.aria) + '">';
+    for (var v = 0; v <= top + 1e-9; v += step) {
+      g += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--line)" stroke-width="1"' + (v ? ' stroke-dasharray="2 3"' : '') + '/>';
+      g += '<text x="' + (L - 6) + '" y="' + (y(v) + 4) + '" text-anchor="end">' + cfg.fmtAxis(v) + '</text>';
+    }
+    if (cfg.refLine) g += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(cfg.refLine) + '" y2="' + y(cfg.refLine) + '" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="5 4"/>';
+    g += '<rect class="hl" x="0" y="' + T + '" width="' + band + '" height="' + ph + '" fill="var(--fg)" opacity="0" rx="4"/>';
+    for (var i2 = 0; i2 < cfg.n; i2++) {
+      var x = L + i2 * band + (band - bw) / 2, acc = 0, st = cfg.stacks(i2).filter(function (s) { return s.v > 0; });
+      st.forEach(function (s, k) {
+        var y0 = y(acc + s.v), hh = y(acc) - y0, last = k === st.length - 1;
+        g += last ? '<path d="' + barPath(x, y0, bw, hh, Math.min(4, bw / 2)) + '" fill="' + s.color + '"/>' : '<rect x="' + x + '" y="' + y0 + '" width="' + bw + '" height="' + hh + '" fill="' + s.color + '"/>';
+        if (k > 0) g += '<rect x="' + x + '" y="' + (y(acc) - 1) + '" width="' + bw + '" height="2" fill="var(--surface)"/>';
+        acc += s.v;
+      });
+      if (cfg.mark && cfg.mark(i2)) g += '<text x="' + (L + i2 * band + band / 2) + '" y="' + (T + ph - 4) + '" text-anchor="middle" style="font-size:9px">' + cfg.mark(i2) + '</text>';
+      var lb = cfg.label(i2); if (lb) g += '<text x="' + (L + i2 * band + band / 2) + '" y="' + (H - 6) + '" text-anchor="middle">' + lb + '</text>';
+    }
+    g += '</svg><div class="tip" hidden></div>';
+    box.innerHTML = g;
+    var svg = box.querySelector('svg'), tip = box.querySelector('.tip'), hl = box.querySelector('.hl');
+    function show(ev) {
+      var r = svg.getBoundingClientRect(), sx = (ev.clientX - r.left) * W / r.width, i = Math.floor((sx - L) / band);
+      if (i < 0 || i >= cfg.n) { hide(); return; }
+      var html = cfg.tip(i); if (!html) { hide(); return; }
+      hl.setAttribute('x', L + i * band); hl.setAttribute('opacity', '0.06');
+      tip.innerHTML = html; tip.hidden = false;
+      var bx = (L + i * band + band / 2) * r.width / W, tw = tip.offsetWidth, left = bx + 12;
+      if (left + tw > r.width) left = bx - tw - 12; if (left < 0) left = 0;
+      tip.style.left = left + 'px'; tip.style.top = '4px';
+    }
+    function hide() { tip.hidden = true; hl.setAttribute('opacity', '0'); }
+    svg.addEventListener('pointermove', show); svg.addEventListener('pointerdown', show); svg.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse') hide(); });
+  }
+  draw();
+  var w = box.clientWidth; var ro = new ResizeObserver(function () { if (Math.abs(box.clientWidth - w) > 4) { w = box.clientWidth; draw(); } }); ro.observe(box);
+}
+function dailyChart(box, d) {
+  var objs = d.objects;
+  columnChart(box, {
+    n: d.days, height: 200, aria: 'Начисления по дням по объектам',
+    stacks: function (i) { var x = d.daily[i]; return objs.map(function (o) { return { v: x.byObj[o.id] || 0, color: objColor(o.id) }; }); },
+    label: function (i) { var dd = i + 1; return dd === 1 || dd % 5 === 0 ? dd : ''; },
+    fmtAxis: compact,
+    tip: function (i) {
+      var x = d.daily[i]; if (!x.total) return '';
+      return '<div class="t">' + fmtDay(x.date) + '</div>' + objs.map(function (o) {
+        return x.byObj[o.id] ? '<div class="l"><span><i style="background:' + objColor(o.id) + '"></i>' + esc(o.name) + '</span><span>' + money(x.byObj[o.id]) + '</span></div>' : ''; }).join('') +
+        '<div class="l" style="margin-top:3px;font-weight:600"><span>Всего · ' + x.present + ' чел.</span><span>' + money(x.total) + '</span></div>';
+    }
+  });
+}
+
+/* ================= СЕГОДНЯ ================= */
+function renderToday() {
+  topBar('Сегодня', { date: true }); loading();
+  load('day', { date: S.date, objectId: S.obj }, drawDay);
+}
+function drawDay(d) {
+  d = withPending(d);
+  S.day = d;
+  var s = d.summary, h = '<div class="stack"><div id="qbar" hidden></div>';
+  h += '<div class="card"><div class="strip">' +
+    '<span><i class="dot" style="background:var(--good)"></i>Вышли <b>' + s.present + '</b> из ' + s.total + '</span>' +
+    (d.isToday ? '<span><i class="dot" style="background:var(--s1)"></i>На объекте <b>' + s.onSite + '</b></span><span><i class="dot" style="background:var(--muted)"></i>Ушли <b>' + s.left + '</b></span>' : '') +
+    '<span><i class="dot" style="background:var(--warn)"></i>Опоздали <b>' + s.late + '</b></span>' +
+    (s.unmarked ? '<span><i class="dot" style="background:var(--line)"></i>Не отмечены <b>' + s.unmarked + '</b></span>' : '') +
+    (s.absent ? '<span><i class="dot" style="background:var(--crit)"></i>Прогул <b>' + s.absent + '</b></span>' : '') + '</div>';
+  var unm = d.rows.filter(function (r) { return !r.rec; });
+  if (d.editable && d.isToday && unm.length) h += '<button class="btn block" id="bAllIn" style="margin-top:12px">' + ic('check') + 'Отметить приход всех неотмеченных · ' + unm.length + '</button>';
+  if (!d.editable) h += '<div class="hint" style="margin-top:10px;font-size:13px">Этот день закрыт для изменений. Исправления вносит руководитель.</div>';
+  h += '</div>';
+  if (!d.rows.length) h += '<div class="card empty">На объекте пока нет сотрудников</div>';
+  else {
+    h += '<div class="card"><div class="list">';
+    var lastObj = null;
+    d.rows.forEach(function (r) {
+      if (S.init.me.isBoss && !S.obj && r.emp.objectId !== lastObj) { lastObj = r.emp.objectId; h += '<div class="grp">' + esc(r.emp.objectName) + '</div>'; }
+      var rec = r.rec, times = '';
+      if (rec && rec.status === 'Явка') times = '<span class="num">' + (rec.in || '—') + ' → ' + (rec.out || '…') + '</span>' + (rec.out ? ' <span class="num">' + hrs(rec.hours) + (rec.ot ? ' · +' + nf1.format(rec.ot) + ' сверх' : '') + '</span>' : '');
+      var act = '';
+      if (d.editable && d.isToday) {
+        if (!rec) act = '<button class="btn sm act" data-in="' + r.emp.id + '">Пришёл</button>';
+        else if (rec.status === 'Явка' && rec.in && !rec.out) act = '<button class="btn sm sec act" data-out="' + r.emp.id + '">Ушёл</button>';
+      }
+      h += '<div class="row tap" data-edit="' + r.emp.id + '"><div class="main"><div class="name">' + esc(r.emp.name) + '</div><div class="meta">' + statusChip(rec) + times + (rec && rec._pending ? '<span class="chip wait">' + ic('refresh') + 'ждёт отправки</span>' : '') + '</div></div>' + (act ? '<div class="side">' + act + '</div>' : '') + '</div>';
+    });
+    h += '</div></div>';
+  }
+  h += '</div>';
+  $('#view').innerHTML = h;
+  qBar($('#qbar'));
+  var v = $('#view');
+  v.querySelectorAll('[data-in]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); mark([b.dataset.in], 'in', b); }; });
+  v.querySelectorAll('[data-out]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); mark([b.dataset.out], 'out', b); }; });
+  v.querySelectorAll('[data-edit]').forEach(function (el) { el.onclick = function () {
+    var row = d.rows.filter(function (x) { return x.emp.id === el.dataset.edit; })[0]; openRecord(row.emp, row.rec, d.date, d.editable, function () { renderToday(); }); }; });
+  var all = $('#bAllIn');
+  if (all) all.onclick = function () {
+    openSheet('<h3>Отметить приход</h3><div class="muted">Время прихода — сейчас, ' + esc(d.now) + '. Опоздания посчитаются от начала смены.</div><div class="list">' +
+      unm.map(function (r) { return '<div class="row"><div class="main"><div class="name">' + esc(r.emp.name) + '</div><div class="meta">' + esc(r.emp.position || '') + '</div></div></div>'; }).join('') +
+      '</div><button class="btn block" id="cAll">Отметить · ' + unm.length + ' ' + plural(unm.length, 'человек', 'человека', 'человек') + '</button><button class="btn sec block" id="cCancel">Отмена</button>', function () {
+      $('#cCancel').onclick = closeSheet;
+      $('#cAll').onclick = function () { closeSheet(); mark(unm.map(function (r) { return r.emp.id; }), 'in'); };
+    });
+  };
+}
+function mark(ids, action, btn) {
+  if (DEMO) {
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    api('mark', { empIds: ids, action: action, date: S.date, objectId: S.obj }).then(function (d) {
+      haptic('success'); toast(action === 'in' ? 'Приход отмечен' : 'Уход отмечен'); drawDay(d);
+    }).catch(function (e) { fail(e); renderToday(); });
+    return;
+  }
+  var sn = serverNow();
+  var it = { rid: rid(), action: action, empIds: ids, date: S.date, objectId: S.obj, at: Date.now() };
+  if (S.date === sn.date) it.time = sn.time;          // время нажатия по часам сервера — даже если отправится позже
+  Q.items.push(it); qSave();
+  haptic('success'); toast(action === 'in' ? 'Приход отмечен' : 'Уход отмечен');
+  if (S.day) drawDay(S.day);                          // сразу показываем, не дожидаясь сервера
+  forget('month'); forget('dashboard');
+  qRun();
+}
+
+/* ---------- карточка отметки ---------- */
+function openRecord(emp, rec, date, editable, after) {
+  var st = rec ? rec.status : 'Явка';
+  var h = '<div><h3>' + esc(emp.name) + '</h3><div class="muted">' + fmtDay(date) + '</div></div>';
+  if (rec && rec.status === 'Явка' && rec.out) {
+    h += '<div class="receipt"><div><span>Отработано</span><span>' + hrs(rec.hours) + '</span></div>' + (rec.ot ? '<div><span>Из них сверхурочно</span><span>' + hrs(rec.ot) + '</span></div>' : '') +
+      (rec.sum !== undefined ? '<div><span>Начислено за день</span><span>' + money(rec.sum) + '</span></div>' : '') + (rec.late ? '<div><span>Опоздание</span><span>' + rec.late + ' мин</span></div>' : '') + '</div>';
+  }
+  if (editable) {
+    h += '<div class="seg" role="group" aria-label="Статус дня">' + Core.STATUSES.map(function (s) {
+      return '<button type="button" data-st="' + s.id + '" aria-pressed="' + (s.id === st) + '"><b>' + s.code + '</b>' + s.id + '</button>'; }).join('') + '</div>';
+    h += '<div id="timeBox" class="three"' + (st !== 'Явка' ? ' hidden' : '') + '>' +
+      '<div class="field"><label for="fIn">Приход</label><input id="fIn" type="time" value="' + (rec && rec.in || (date === S.init.today ? '' : '08:00')) + '"></div>' +
+      '<div class="field"><label for="fOut">Уход</label><input id="fOut" type="time" value="' + (rec && rec.out || '') + '"></div>' +
+      '<div class="field"><label for="fLunch">Обед, мин</label><input id="fLunch" type="number" inputmode="numeric" min="0" max="600" value="' + (rec ? rec.lunch : 60) + '"></div></div>';
+    h += '<div class="err" id="fErr" hidden></div><button class="btn block" id="fSave">Сохранить</button>';
+  } else h += '<div class="hint">Этот день закрыт для изменений.</div>';
+  h += '<button class="btn ghost" id="fCard">Карточка сотрудника за месяц →</button>';
+  openSheet(h, function (sh) {
+    sh.querySelectorAll('[data-st]').forEach(function (b) { b.onclick = function () {
+      st = b.dataset.st; sh.querySelectorAll('[data-st]').forEach(function (x) { x.setAttribute('aria-pressed', x === b); });
+      $('#timeBox').hidden = st !== 'Явка'; }; });
+    $('#fCard').onclick = function () { closeSheet(); openEmployee(emp.id); };
+    var sv = $('#fSave');
+    if (sv) sv.onclick = function () {
+      var p = { empId: emp.id, date: date, status: st, objectId: S.obj };
+      if (st === 'Явка') { p.in = $('#fIn').value; p.out = $('#fOut').value; p.lunch = $('#fLunch').value; }
+      if (st === 'Явка' && !p.in) { var er = $('#fErr'); er.textContent = 'Укажите время прихода'; er.hidden = false; return; }
+      sv.disabled = true;
+      api('edit', p).then(function (d) { closeSheet(); haptic('success'); toast('Сохранено'); forget(); if (d && d.rows) cput(ckey('day', { date: d.date, objectId: S.obj }), d); after && after(); })
+        .catch(function (e) { sv.disabled = false; var er = $('#fErr'); er.textContent = e.message; er.hidden = false; });
+    };
+  });
+}
+
+/* ================= ТАБЕЛЬ (месяц) ================= */
+function renderSheet() {
+  topBar('Табель', { month: true, export: S.init.config.canExport }); loading();
+  load('month', { month: S.month, objectId: S.obj }, function (d) {
+    if (!d.rows.length) { $('#view').innerHTML = '<div class="card empty">Нет сотрудников</div>'; return; }
+    var todayDay = Core.util.monthOf(d.today) === d.month ? +d.today.slice(8, 10) : 0;
+    var h = '<div class="card"><div class="mx-wrap"><table class="mx"><thead><tr><th class="nm">Сотрудник</th>';
+    for (var i = 1; i <= d.days; i++) { var we = d.dows[i - 1] === 0 || d.dows[i - 1] === 6; h += '<th class="d' + (we ? ' we' : '') + (i === todayDay ? ' td' : '') + '">' + i + '<small>' + DOW[d.dows[i - 1]] + '</small></th>'; }
+    h += '<th class="tot">Дни</th><th class="tot">Часы</th></tr></thead><tbody>';
+    var lastObj = null;
+    d.rows.forEach(function (r) {
+      if (S.init.me.isBoss && !S.obj && r.objectId !== lastObj) { lastObj = r.objectId; h += '<tr><td colspan="' + (d.days + 3) + '" style="text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em"><span style="position:sticky;left:0">' + esc(r.objectName) + '</span></td></tr>'; }
+      h += '<tr><td class="nm" data-emp="' + esc(r.empId) + '" title="' + esc(r.name) + '">' + esc(r.name) + '</td>';
+      for (var i = 1; i <= d.days; i++) {
+        var c = r.cells[i], we = d.dows[i - 1] === 0 || d.dows[i - 1] === 6, cls = 'd' + (we ? ' we' : '') + (i === todayDay ? ' td' : ''), txt = '';
+        if (c) {
+          if (c.s === 'Явка') { txt = c.open ? '…' : nf1.format(c.h); if (c.ot) cls += ' ot'; if (c.late) cls += ' late'; }
+          else { txt = '<span class="cd' + (c.s === 'Прогул' ? ' pr' : '') + '">' + Core.CODE[c.s] + '</span>'; }
+        }
+        h += '<td class="' + cls + '"' + (c && c.late ? ' title="Опоздание ' + c.late + ' мин"' : '') + '>' + txt + '</td>';
+      }
+      h += '<td class="tot">' + r.days + '</td><td class="tot">' + nf0.format(r.hours) + '</td></tr>';
+    });
+    h += '</tbody></table></div><div class="mx-legend"><span><b>8</b> — часы</span><span><b>Я</b>…на объекте</span><span><b>В</b> выходной</span><span><b>ОТ</b> отпуск</span><span><b>Б</b> больничный</span><span><b>ПР</b> прогул</span>' +
+      '<span><i class="dot" style="background:var(--warn);width:6px;height:6px"></i> опоздание</span><span><i class="dot" style="background:var(--ot-bg);border-radius:2px;border:1px solid var(--line)"></i> сверхурочные</span></div></div>';
+    h += '<div class="card" style="margin-top:12px"><div class="strip"><span>Сотрудников <b>' + d.totals.count + '</b></span><span>Человеко-дней <b>' + d.totals.days + '</b></span><span>Часов <b>' + nf0.format(d.totals.hours) + '</b></span><span>Сверхурочных <b>' + nf0.format(d.totals.ot) + '</b></span><span>Опозданий <b>' + d.totals.late + '</b></span></div></div>';
+    $('#view').innerHTML = h;
+    $('#view').querySelectorAll('[data-emp]').forEach(function (el) { el.onclick = function () { openEmployee(el.dataset.emp); }; });
+  });
+}
+
+/* ================= СОТРУДНИКИ / ЗАРПЛАТА ================= */
+function renderStaff() {
+  var boss = S.init.me.isBoss, cfg = S.init.config;
+  topBar(boss ? 'Сотрудники' : 'Бригада', { month: true, export: cfg.canExport }); loading();
+  load('month', { month: S.month, objectId: S.obj, withInactive: !!S.showInactive }, function (d) {
+    var t = d.totals, pay = cfg.paySeen;
+    var h = '<div class="stack">';
+    if (pay) h += '<div class="tiles">' + tile('Начислено', money(t.sum), t.count + ' чел. · ' + nf0.format(t.hours) + ' ч') + tile('Авансы выданы', money(t.advance), 'премии ' + money(t.bonus)) + tile('К выплате', money(t.toPay), 'удержания ' + money(t.deduction)) + '</div>';
+    h += '<div class="ctrl-row"><input class="search" id="q" type="search" placeholder="Поиск по фамилии" value="' + esc(S.staffQ) + '" aria-label="Поиск по фамилии" style="flex:1;min-width:0">' +
+      '<button class="btn sm" id="bAdd">' + ic('plus') + 'Сотрудник</button></div>' +
+      '<label style="display:flex;gap:8px;align-items:center;font-size:14px;color:var(--muted)"><input type="checkbox" id="showInact"' + (S.showInactive ? ' checked' : '') + '> Показать удалённых из бригады</label>';
+    h += '<div class="card"><div class="list" id="staffList"></div></div></div>';
+    $('#view').innerHTML = h;
+    function list() {
+      var q = S.staffQ.trim().toLowerCase(), lastObj = null, out = '';
+      var rows = d.rows.filter(function (r) { return !q || r.name.toLowerCase().indexOf(q) >= 0; });
+      rows.forEach(function (r) {
+        if (boss && !S.obj && r.objectId !== lastObj) { lastObj = r.objectId; out += '<div class="grp">' + esc(r.objectName) + '</div>'; }
+        out += '<div class="row tap" data-emp="' + esc(r.empId) + '"' + (r.active ? '' : ' style="opacity:.62"') + '><div class="main"><div class="name">' + esc(r.name) + '</div>' + (r.active ? '' : '<div class="meta"><span class="chip crit">' + ic('x') + 'удалён ' + fdate(r.dismissedAt) + '</span><span>' + esc(r.dismissReason || '') + '</span></div>') + '<div class="meta"><span>' + esc(r.position || '') + '</span>' +
+          '<span class="num">' + r.days + ' дн · ' + nf0.format(r.hours) + ' ч' + (r.ot ? ' · +' + nf0.format(r.ot) + ' сверх' : '') + '</span>' + (r.late ? '<span class="chip warn">' + ic('alert') + r.late + '</span>' : '') + (r.absent ? '<span class="chip crit">' + ic('x') + 'ПР ' + r.absent + '</span>' : '') + '</div></div>' +
+          (pay ? '<div class="side"><div class="v">' + money(r.toPay) + '</div><div class="s">к выплате</div></div>' : '') + '</div>';
+      });
+      $('#staffList').innerHTML = out || '<div class="empty">Никого не нашли</div>';
+      $('#staffList').querySelectorAll('[data-emp]').forEach(function (el) { el.onclick = function () { openEmployee(el.dataset.emp); }; });
+    }
+    list();
+    $('#q').oninput = function () { S.staffQ = this.value; list(); };
+    var add = $('#bAdd'); if (add) add.onclick = function () { openEmpForm(null); };
+    $('#showInact').onchange = function () { S.showInactive = this.checked; renderStaff(); };
+  });
+}
+
+/* ================= КАРТОЧКА СОТРУДНИКА ================= */
+function openEmployee(empId, month) {
+  var pg = $('#page'); pg.hidden = false;
+  var m = month || S.month;
+  pg.innerHTML = '<div class="top"><div class="wrap"><button class="icon-btn" id="pBack" aria-label="Назад">' + ic('back') + '</button><b style="flex:1">Сотрудник</b>' +
+    '<div class="stepper"><button id="pmPrev" aria-label="Предыдущий месяц">‹</button><span style="min-width:110px">' + fmtMonth(m) + '</span><button id="pmNext" aria-label="Следующий месяц"' + (m >= Core.util.monthOf(S.init.today) ? ' disabled' : '') + '>›</button></div></div></div><main class="wrap" id="pBody"><div class="empty">Загрузка…</div></main>';
+  $('#pBack').onclick = closePage;
+  $('#pmPrev').onclick = function () { openEmployee(empId, Core.util.addMonths(m, -1)); };
+  $('#pmNext').onclick = function () { openEmployee(empId, Core.util.addMonths(m, 1)); };
+  if (IN_TG && tg.BackButton) { tg.BackButton.show(); tg.BackButton.onClick(closePage); }
+  S.pageFn = function () { openEmployee(empId, m); };
+  api('employee', { empId: empId, month: m }).then(function (d) {
+    var e = d.emp, r = d.row || { days: 0, hours: 0, ot: 0, late: 0, lateMin: 0, absent: 0, sick: 0, vacation: 0, sum: 0, sum1_15: 0, advance: 0, bonus: 0, deduction: 0, toPay: 0 };
+    var boss = S.init.me.isBoss, pay = S.init.config.paySeen;
+    var h = '<div class="stack" style="padding-top:12px">';
+    h += '<div class="card"><div style="font-size:20px;font-weight:700">' + esc(e.name) + (e.active ? '' : ' <span class="chip crit">' + ic('x') + 'удалён</span>') + '</div><div class="muted">' + esc(e.position || '') + ' · ' + esc(e.objectName || '') + '</div>' +
+      '<div class="hint num" style="font-size:13px;margin-top:4px">' + (e.rate !== undefined ? money(e.rate) + '/ч · ' : '') + 'норма ' + nf1.format(e.norm) + ' ч · сверхурочные ×' + nf1.format(e.otk) + (e.phone ? ' · ' + esc(e.phone) : '') + '</div></div>';
+    if (!e.active) h += '<div class="notice"><b>Удалён из бригады ' + fdate(e.dismissedAt) + '</b><br>' + esc(e.dismissReason || 'Причина не указана') + '</div>';
+    h += '<div class="tiles">' + tile('Дней', String(r.days), (r.sick ? 'больничный ' + r.sick + ' · ' : '') + (r.vacation ? 'отпуск ' + r.vacation : '') || ' ') +
+      tile('Часов', hrs(r.hours), 'сверхурочно ' + hrs(r.ot)) + tile('Опозданий', String(r.late), r.late ? 'всего ' + r.lateMin + ' мин' : 'нет') +
+      tile('Прогулов', String(r.absent), r.absent ? 'за месяц' : 'нет') + '</div>';
+    h += '<div class="card"><h2>Часы по дням</h2><div class="legend"><span><i style="background:var(--s1)"></i>в норме</span><span><i style="background:var(--s2)"></i>сверхурочно</span><span><i style="height:0;border-top:2px dashed var(--muted);border-radius:0"></i>норма ' + nf1.format(e.norm) + ' ч</span></div><div class="chart" id="chEmp"></div></div>';
+    if (pay) {
+      h += '<div class="card"><h2>Расчёт за ' + fmtMonth(d.month).toLowerCase() + '</h2><div class="receipt">' +
+        '<div><span>Начислено по табелю</span><span>' + money(r.sum) + '</span></div>' +
+        '<div class="hint" style="font-size:13px"><span>в т. ч. за 1–15 число (ориентир для аванса)</span><span>' + money(r.sum1_15) + '</span></div>' +
+        '<div><span>+ Премия</span><span>' + money(r.bonus) + '</span></div><div><span>− Удержание</span><span>' + money(r.deduction) + '</span></div>' +
+        '<div><span>− Аванс выдан</span><span>' + money(r.advance) + '</span></div><div class="sum"><span>К выплате</span><span>' + money(r.toPay) + '</span></div></div>';
+      if (boss || S.init.config.canAdvance) h += '<div class="ctrl-row" style="margin-top:12px"><button class="btn sm" id="bAdv">Выдать аванс</button>' + (boss ? '<button class="btn sm sec" id="bAdj">Премия / удержание</button>' : '') + '</div>';
+      if (d.advances.length || d.adjustments.length) {
+        h += '<div class="list" style="margin-top:8px">' + d.advances.map(function (a) { return '<div class="row"><div class="main"><div class="name">Аванс</div><div class="meta">' + a.date.split('-').reverse().join('.') + (a.comment ? ' · ' + esc(a.comment) : '') + '</div></div><div class="side"><div class="v">' + money(a.amount) + '</div></div></div>'; }).join('') +
+          d.adjustments.map(function (a) { return '<div class="row"><div class="main"><div class="name">' + (a.bonus ? 'Премия' : 'Удержание') + '</div><div class="meta">' + esc(a.comment || '') + '</div></div><div class="side"><div class="v">' + (a.bonus ? '+' + money(a.bonus) : '−' + money(a.deduction)) + '</div></div></div>'; }).join('') + '</div>';
+      }
+      h += '</div>';
+    }
+    h += '<div class="card"><h2>Дни</h2><div class="list">' + (d.records.length ? d.records.map(function (x) {
+      return '<div class="row tap" data-date="' + x.date + '"><div class="main"><div class="name num" style="font-size:14px">' + fmtShort(x.date) + '</div><div class="meta">' + statusChip(x) + (x.status === 'Явка' ? '<span class="num">' + (x.in || '—') + ' → ' + (x.out || '…') + '</span>' : '') + '</div></div>' +
+        (x.status === 'Явка' ? '<div class="side"><div class="v">' + hrs(x.hours) + '</div>' + (x.sum !== undefined ? '<div class="s num">' + money(x.sum) + '</div>' : '') + '</div>' : '') + '</div>';
+    }).join('') : '<div class="hint">За этот месяц отметок нет</div>') + '</div></div>';
+    if (d.hr && d.hr.length) h += '<div class="card"><h2>История</h2><div class="list">' + d.hr.map(hrRow).join('') + '</div></div>';
+    h += '<div class="ctrl-row">' + (e.active ? '<button class="btn sec" id="bEditEmp" style="flex:1">Изменить данные</button><button class="btn danger-ghost" id="bRemove" style="flex:1">' + ic('trash') + 'Удалить из бригады</button>'
+      : '<button class="btn" id="bRestore" style="flex:1">' + ic('undo') + 'Вернуть в бригаду</button>') + '</div>';
+    h += '</div>';
+    $('#pBody').innerHTML = h;
+    var byDay = {}; d.records.forEach(function (x) { byDay[+x.date.slice(8, 10)] = x; });
+    columnChart($('#chEmp'), {
+      n: d.days, height: 170, refLine: e.norm, aria: 'Часы по дням',
+      stacks: function (i) { var x = byDay[i + 1]; if (!x || x.status !== 'Явка') return []; return [{ v: x.hours - x.ot, color: 'var(--s1)' }, { v: x.ot, color: 'var(--s2)' }]; },
+      mark: function (i) { var x = byDay[i + 1]; return x && x.status !== 'Явка' ? Core.CODE[x.status] : ''; },
+      label: function (i) { var dd = i + 1; return dd === 1 || dd % 5 === 0 ? dd : ''; },
+      fmtAxis: function (v) { return nf1.format(v); },
+      tip: function (i) { var x = byDay[i + 1]; if (!x) return ''; return '<div class="t">' + fmtDay(x.date) + '</div>' + (x.status === 'Явка' ? '<div class="l"><span>' + (x.in || '—') + ' → ' + (x.out || '…') + '</span><span>' + hrs(x.hours) + '</span></div>' + (x.ot ? '<div class="l"><span>сверхурочно</span><span>' + hrs(x.ot) + '</span></div>' : '') + (x.late ? '<div class="l"><span>опоздание</span><span>' + x.late + ' мин</span></div>' : '') : '<div>' + esc(x.status) + '</div>'); }
+    });
+    var editable = function (date) { return boss || (date <= S.init.today && date >= Core.util.addDays(S.init.today, -S.init.config.foremanEditDays)); };
+    $('#pBody').querySelectorAll('[data-date]').forEach(function (el) { el.onclick = function () {
+      var x = byDay[+el.dataset.date.slice(8, 10)]; openRecord(e, x, el.dataset.date, editable(el.dataset.date), function () { S.pageFn(); refreshBehind(); }); }; });
+    var a = $('#bAdv'); if (a) a.onclick = function () { openMoney('advance', e, d.month); };
+    var j = $('#bAdj'); if (j) j.onclick = function () { openMoney('adjust', e, d.month); };
+    var ee = $('#bEditEmp'); if (ee) ee.onclick = function () { openEmpForm(e); };
+    var rm = $('#bRemove'); if (rm) rm.onclick = function () { openRemove(e); };
+    var rs = $('#bRestore'); if (rs) rs.onclick = function () { openRestore(e); };
+  }).catch(function (e) { $('#pBody').innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
+}
+function closePage() {
+  $('#page').hidden = true; $('#page').innerHTML = ''; S.pageFn = null;
+  if (IN_TG && tg.BackButton) { tg.BackButton.offClick(closePage); tg.BackButton.hide(); }
+}
+function refreshBehind() { forget(); if (S.tab === 'today') renderToday(); }
+
+function openMoney(kind, e, month) {
+  var adv = kind === 'advance';
+  var h = '<h3>' + (adv ? 'Выдать аванс' : 'Премия или удержание') + '</h3><div class="muted">' + esc(e.name) + ' · ' + fmtMonth(month).toLowerCase() + '</div>';
+  if (adv) h += '<div class="two"><div class="field"><label for="mAmt">Сумма, ₽</label><input id="mAmt" type="number" inputmode="decimal" min="0" step="100"></div><div class="field"><label for="mDate">Дата</label><input id="mDate" type="date" value="' + S.init.today + '"></div></div>';
+  else h += '<div class="two"><div class="field"><label for="mBonus">Премия, ₽</label><input id="mBonus" type="number" inputmode="decimal" min="0" step="100"></div><div class="field"><label for="mDed">Удержание, ₽</label><input id="mDed" type="number" inputmode="decimal" min="0" step="100"></div></div>';
+  h += '<div class="field"><label for="mCom">Комментарий</label><input id="mCom" type="text" maxlength="200" placeholder="' + (adv ? 'Например: наличными на объекте' : 'За что') + '"></div><div class="err" id="mErr" hidden></div><button class="btn block" id="mSave">Сохранить</button>';
+  openSheet(h, function () {
+    $('#mSave').onclick = function () {
+      var p = adv ? { empId: e.id, amount: $('#mAmt').value, date: $('#mDate').value, comment: $('#mCom').value } : { empId: e.id, month: month, bonus: $('#mBonus').value, deduction: $('#mDed').value, comment: $('#mCom').value };
+      this.disabled = true; var btn = this;
+      api(adv ? 'addAdvance' : 'addAdjustment', p).then(function () { closeSheet(); haptic('success'); toast('Сохранено'); S.pageFn && S.pageFn(); })
+        .catch(function (er) { btn.disabled = false; $('#mErr').textContent = er.message; $('#mErr').hidden = false; });
+    };
+  });
+}
+
+function reasonPicks(name, list, sel) {
+  return '<div class="picks" role="radiogroup">' + list.map(function (r, i) {
+    return '<label><input type="radio" name="' + name + '" value="' + esc(r) + '"' + (r === sel ? ' checked' : '') + '> ' + esc(r) + '</label>'; }).join('') + '</div>';
+}
+function picked(name) { var x = document.querySelector('input[name="' + name + '"]:checked'); return x ? x.value : ''; }
+function hrRow(h) {
+  var cls = h.action === 'Удалён' ? 'out' : h.action === 'Переведён' ? 'mv' : 'in';
+  return '<div class="row"' + (h.empId && !S.pageFn ? ' data-emp="' + esc(h.empId) + '" style="cursor:pointer"' : '') + '><div class="main"><div class="name"><span class="ev ' + cls + '">' + esc(h.action) + '</span> ' + esc(h.empName || '') + '</div>' +
+    '<div class="meta"><span>' + esc(h.reason || '') + (h.comment ? ' — ' + esc(h.comment) : '') + '</span></div><div class="meta hint" style="font-size:12px">' + fdate(h.date) + (h.objectName ? ' · ' + esc(h.objectName) : '') + (h.by ? ' · внёс ' + esc(h.by) : '') + '</div></div></div>';
+}
+
+function openEmpForm(e) {
+  var boss = S.init.me.isBoss, cfg = S.init.config, isNew = !(e && e.id);
+  e = e || { name: '', position: '', objectId: boss ? (S.obj || (S.init.objects[0] || {}).id) : S.init.me.objectId, rate: '', norm: 8, otk: 1.5, phone: '' };
+  var showRate = boss || (isNew && cfg.canSetRate);
+  var h = '<h3>' + (isNew ? 'Новый сотрудник' : 'Данные сотрудника') + '</h3>' + (!boss ? '<div class="muted">' + esc(objName(S.init.me.objectId)) + '</div>' : '') +
+    '<div class="field"><label for="eName">ФИО</label><input id="eName" type="text" value="' + esc(e.name) + '" autocomplete="off" placeholder="Фамилия Имя Отчество"></div>' +
+    '<div class="two"><div class="field"><label for="ePos">Должность</label><input id="ePos" type="text" value="' + esc(e.position) + '" placeholder="Например: каменщик"></div>' +
+    '<div class="field"><label for="ePhone">Телефон</label><input id="ePhone" type="tel" value="' + esc(e.phone || '') + '"></div></div>';
+  if (boss) h += '<div class="field"><label for="eObj">Объект</label><select id="eObj">' + S.init.objects.map(function (o) { return '<option value="' + esc(o.id) + '"' + (o.id === e.objectId ? ' selected' : '') + '>' + esc(o.name) + '</option>'; }).join('') + '</select></div>';
+  if (showRate) h += (boss ? '<div class="three">' : '<div class="two">') + '<div class="field"><label for="eRate">Ставка, ₽/ч</label><input id="eRate" type="number" inputmode="decimal" value="' + esc(e.rate) + '"></div>' +
+    (boss ? '<div class="field"><label for="eNorm">Норма, ч/день</label><input id="eNorm" type="number" inputmode="decimal" value="' + esc(e.norm) + '"></div>' +
+    '<div class="field"><label for="eOtk">Коэф. сверх.</label><input id="eOtk" type="number" inputmode="decimal" step="0.1" value="' + esc(e.otk) + '"></div>' : '') + (isNew && !boss ? '<div class="field"><label for="eDate">Первый день</label><input id="eDate" type="date" value="' + S.init.today + '"></div>' : '') + '</div>';
+  if (isNew) {
+    if (!showRate) h += '<div class="field"><label for="eDate">Первый день</label><input id="eDate" type="date" value="' + S.init.today + '"></div>';
+    h += '<div class="field"><label>Основание приёма</label>' + reasonPicks('hireR', S.init.hireReasons, '') + '</div>' +
+      '<div class="field"><label for="eCom">Комментарий</label><textarea id="eCom" maxlength="300" placeholder="Кого заменяет, откуда пришёл — по желанию"></textarea></div>';
+  } else if (boss) {
+    h += '<div class="field" id="mvBox" hidden><label for="eCom">Причина перевода</label><textarea id="eCom" maxlength="300" placeholder="Например: усиление бригады на объекте"></textarea></div>';
+  }
+  if (showRate && !isNew) h += '<div class="hint" style="font-size:13px">Новая ставка действует с новых отметок; прошлые дни не пересчитываются.</div>';
+  if (!boss && isNew && !cfg.canSetRate) h += '<div class="hint" style="font-size:13px">Ставку укажет руководитель.</div>';
+  h += '<div class="err" id="eErr" hidden></div><button class="btn block" id="eSave">' + (isNew ? 'Добавить в бригаду' : 'Сохранить') + '</button>';
+  openSheet(h, function () {
+    var objSel = $('#eObj');
+    if (objSel && !isNew) objSel.onchange = function () { $('#mvBox').hidden = objSel.value === e.objectId; };
+    $('#eSave').onclick = function () {
+      var btn = this, err = $('#eErr');
+      var p = { id: e.id, name: $('#eName').value, position: $('#ePos').value, phone: $('#ePhone').value };
+      if (objSel) p.objectId = objSel.value;
+      if ($('#eRate')) p.rate = $('#eRate').value;
+      if ($('#eNorm')) { p.norm = $('#eNorm').value; p.otk = $('#eOtk').value; }
+      if (isNew) { p.reason = picked('hireR'); p.comment = $('#eCom').value; p.date = $('#eDate') ? $('#eDate').value : ''; }
+      else if ($('#eCom')) p.comment = $('#eCom').value;
+      if (isNew && !p.reason) { err.textContent = 'Выберите основание приёма'; err.hidden = false; return; }
+      btn.disabled = true;
+      api('saveEmployee', p).then(function () { closeSheet(); haptic('success'); toast(isNew ? 'Сотрудник добавлен' : 'Сохранено'); if (S.pageFn) S.pageFn(); else render(); })
+        .catch(function (er) { btn.disabled = false; err.textContent = er.message; err.hidden = false; });
+    };
+  });
+}
+
+function openRemove(e) {
+  var h = '<h3>Удалить из бригады</h3><div class="muted">' + esc(e.name) + ' · ' + esc(e.objectName || '') + '</div>' +
+    '<div class="field"><label>Причина</label>' + reasonPicks('fireR', S.init.fireReasons, '') + '</div>' +
+    '<div class="field"><label for="rCom">Комментарий</label><textarea id="rCom" maxlength="300" placeholder="Обязательно, если выбрано «Другое»"></textarea></div>' +
+    '<div class="field"><label for="rDate">Последний рабочий день</label><input id="rDate" type="date" value="' + S.init.today + '"></div>' +
+    '<div class="hint" style="font-size:13px">Табель, выплаты и история сохранятся. Сотрудника можно будет вернуть.</div>' +
+    '<div class="err" id="rErr" hidden></div><button class="btn danger block" id="rGo">' + ic('trash') + 'Удалить из бригады</button><button class="btn sec block" id="rCancel">Отмена</button>';
+  openSheet(h, function () {
+    $('#rCancel').onclick = closeSheet;
+    $('#rGo').onclick = function () {
+      var btn = this, err = $('#rErr'), reason = picked('fireR'), com = $('#rCom').value.trim();
+      if (!reason) { err.textContent = 'Выберите причину'; err.hidden = false; return; }
+      if (reason === 'Другое' && !com) { err.textContent = 'Опишите причину в комментарии'; err.hidden = false; return; }
+      btn.disabled = true;
+      api('removeEmployee', { empId: e.id, reason: reason, comment: com, date: $('#rDate').value }).then(function () {
+        closeSheet(); haptic('success'); toast(e.name + ' удалён из бригады'); if (S.pageFn) S.pageFn(); render();
+      }).catch(function (er) { btn.disabled = false; err.textContent = er.message; err.hidden = false; });
+    };
+  });
+}
+function openRestore(e) {
+  var boss = S.init.me.isBoss;
+  var h = '<h3>Вернуть в бригаду</h3><div class="muted">' + esc(e.name) + '</div>' +
+    (boss ? '<div class="field"><label for="bObj">На объект</label><select id="bObj">' + S.init.objects.map(function (o) { return '<option value="' + esc(o.id) + '"' + (o.id === e.objectId ? ' selected' : '') + '>' + esc(o.name) + '</option>'; }).join('') + '</select></div>' : '') +
+    '<div class="field"><label for="bCom">Комментарий</label><textarea id="bCom" maxlength="300" placeholder="Например: вернулся после переезда"></textarea></div>' +
+    '<div class="err" id="bErr" hidden></div><button class="btn block" id="bGo">' + ic('undo') + 'Вернуть</button>';
+  openSheet(h, function () {
+    $('#bGo').onclick = function () {
+      var btn = this; btn.disabled = true;
+      api('restoreEmployee', { empId: e.id, objectId: $('#bObj') ? $('#bObj').value : '', comment: $('#bCom').value }).then(function () {
+        closeSheet(); haptic('success'); toast('Сотрудник снова в бригаде'); if (S.pageFn) S.pageFn(); render();
+      }).catch(function (er) { btn.disabled = false; $('#bErr').textContent = er.message; $('#bErr').hidden = false; });
+    };
+  });
+}
+
+/* ================= ОБЪЕКТЫ И ДОСТУП (руководитель) ================= */
+function renderTeam() {
+  topBar('Объекты', { noObj: true }); loading();
+  load('access', {}, drawTeam);
+}
+function drawTeam(a) {
+  S.access = a;
+  S.init.pendingRequests = a.requests.length; renderTabs();
+  S.init.objects = a.objects.filter(function (o) { return o.active; }).map(function (o) { return { id: o.id, name: o.name, address: o.address, shiftStart: o.shiftStart }; });
+  var h = '<div class="stack">';
+  if (a.requests.length) {
+    h += '<div class="card"><h2>Ждут доступа <span class="r">' + a.requests.length + '</span></h2><div class="muted" style="font-size:13px;margin:-4px 0 6px">Эти люди открыли бота. Назначьте их бригадирами или отклоните.</div><div class="list">' +
+      a.requests.map(function (r) {
+        return '<div class="row"><div class="main"><div class="name">' + esc(r.name || 'Без имени') + '</div><div class="meta">' + (r.username ? '<span>@' + esc(r.username) + '</span>' : '') + '<span class="num">ID ' + esc(r.tgId) + '</span><span>' + esc(fdate(r.date)) + '</span></div></div>' +
+          '<div class="side" style="display:flex;gap:6px"><button class="btn sm" data-grant="' + esc(r.tgId) + '">Назначить</button><button class="icon-btn" data-deny="' + esc(r.tgId) + '" aria-label="Отклонить" title="Отклонить">' + ic('x') + '</button></div></div>';
+      }).join('') + '</div></div>';
+  }
+  h += '<div class="card"><h2>Объекты <span class="r"><button class="btn sm" id="bNewObj">' + ic('plus') + 'Объект</button></span></h2><div class="list">' +
+    a.objects.map(function (o) {
+      return '<div class="row tap" data-objid="' + esc(o.id) + '"' + (o.active ? '' : ' style="opacity:.6"') + '><div class="main"><div class="name">' + esc(o.name) + (o.active ? '' : ' <span class="chip">закрыт</span>') + '</div>' +
+        '<div class="meta"><span>' + esc(o.address || 'адрес не указан') + '</span><span class="num">смена с ' + esc(o.shiftStart || '—') + '</span></div>' +
+        '<div class="meta">' + (o.foremen.length ? o.foremen.map(function (f) { return '<span class="chip good">' + ic('user') + esc(f.name) + '</span>'; }).join('') : '<span class="chip warn">' + ic('alert') + 'нет бригадира</span>') + '<span>' + o.headcount + ' чел.</span></div></div></div>';
+    }).join('') + '</div></div>';
+  h += '<div class="card"><h2>У кого есть доступ <span class="r"><button class="btn sm sec" id="bAddId">По Telegram ID</button></span></h2><div class="list">' +
+    a.users.map(function (u) {
+      return '<div class="row tap" data-user="' + esc(u.tgId) + '"><div class="main"><div class="name">' + esc(u.name) + (u.self ? ' <span class="hint">(вы)</span>' : '') + '</div><div class="meta"><span>' + esc(u.role) + '</span>' + (u.objectName ? '<span>' + esc(u.objectName) + '</span>' : '') + '<span class="num hint">ID ' + esc(u.tgId) + '</span></div></div></div>';
+    }).join('') + '</div></div>';
+  h += '</div>';
+  $('#view').innerHTML = h;
+  var v = $('#view');
+  v.querySelectorAll('[data-grant]').forEach(function (b) { b.onclick = function () { openGrant(a.requests.filter(function (r) { return r.tgId === b.dataset.grant; })[0], true); }; });
+  v.querySelectorAll('[data-deny]').forEach(function (b) { b.onclick = function () {
+    b.disabled = true; api('dismissRequest', { tgId: b.dataset.deny }).then(function (x) { toast('Заявка отклонена'); drawTeam(x); }).catch(fail); }; });
+  v.querySelectorAll('[data-objid]').forEach(function (el) { el.onclick = function () { openObject(a.objects.filter(function (o) { return o.id === el.dataset.objid; })[0]); }; });
+  v.querySelectorAll('[data-user]').forEach(function (el) { el.onclick = function () { openGrant(a.users.filter(function (u) { return u.tgId === el.dataset.user; })[0], false); }; });
+  $('#bNewObj').onclick = function () { openObject(null); };
+  $('#bAddId').onclick = function () { openGrant(null, true); };
+}
+function objOptions(sel, withEmpty) {
+  return (withEmpty ? '<option value="">— выберите —</option>' : '') + S.access.objects.filter(function (o) { return o.active; }).map(function (o) {
+    return '<option value="' + esc(o.id) + '"' + (o.id === sel ? ' selected' : '') + '>' + esc(o.name) + '</option>'; }).join('');
+}
+function openObject(o) {
+  var a = S.access, isNew = !o;
+  o = o || { name: '', address: '', shiftStart: '08:00', active: true, foremen: [] };
+  var cands = a.requests.map(function (r) { return { tgId: r.tgId, name: r.name, note: 'заявка' }; })
+    .concat(a.users.filter(function (u) { return u.role === 'Бригадир' && u.objectId !== o.id; }).map(function (u) { return { tgId: u.tgId, name: u.name, note: u.objectName ? 'сейчас: ' + u.objectName : 'без объекта' }; }));
+  var h = '<h3>' + (isNew ? 'Новый объект' : 'Объект') + '</h3>' +
+    '<div class="field"><label for="oName">Название</label><input id="oName" type="text" value="' + esc(o.name) + '" placeholder="Например: ЖК «Южный», корп. 1"></div>' +
+    '<div class="field"><label for="oAddr">Адрес</label><input id="oAddr" type="text" value="' + esc(o.address || '') + '"></div>' +
+    '<div class="two"><div class="field"><label for="oStart">Начало смены</label><input id="oStart" type="time" value="' + esc(o.shiftStart || '08:00') + '"></div>' +
+    (isNew ? '' : '<div class="field"><label for="oAct">Статус</label><select id="oAct"><option value="1"' + (o.active ? ' selected' : '') + '>Работает</option><option value="0"' + (o.active ? '' : ' selected') + '>Закрыт</option></select></div>') + '</div>';
+  if (!isNew && o.foremen.length) h += '<div class="field"><label>Бригадир сейчас</label><div class="list">' + o.foremen.map(function (f) {
+    return '<div class="row"><div class="main"><div class="name">' + esc(f.name) + '</div><div class="meta num hint">ID ' + esc(f.tgId) + '</div></div><div class="side"><button class="btn sm danger-ghost" data-unassign="' + esc(f.tgId) + '">Закрыть доступ</button></div></div>'; }).join('') + '</div></div>';
+  h += '<div class="field"><label for="oFm">' + (o.foremen.length ? 'Назначить ещё / заменить бригадира' : 'Назначить бригадира') + '</label><select id="oFm"><option value="">— не назначать сейчас —</option>' +
+    cands.map(function (c) { return '<option value="' + esc(c.tgId) + '">' + esc(c.name + ' (' + c.note + ')') + '</option>'; }).join('') + '</select>' +
+    (cands.length ? '' : '<div class="hint" style="font-size:12px">Список пуст: попросите бригадира открыть бота — он появится в заявках.</div>') + '</div>' +
+    '<div class="err" id="oErr" hidden></div><button class="btn block" id="oSave">' + (isNew ? 'Создать объект' : 'Сохранить') + '</button>';
+  openSheet(h, function (sh) {
+    sh.querySelectorAll('[data-unassign]').forEach(function (b) { b.onclick = function () {
+      if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Точно закрыть?'; return; }
+      b.disabled = true; api('removeUser', { tgId: b.dataset.unassign }).then(function (x) { closeSheet(); toast('Доступ закрыт'); drawTeam(x); }).catch(fail); }; });
+    $('#oSave').onclick = function () {
+      var btn = this, fm = $('#oFm').value, c = cands.filter(function (x) { return x.tgId === fm; })[0];
+      btn.disabled = true;
+      api('saveObject', { id: o.id, name: $('#oName').value, address: $('#oAddr').value, shiftStart: $('#oStart').value,
+        active: $('#oAct') ? $('#oAct').value === '1' : true, foremanTgId: fm, foremanName: c ? c.name : '' })
+        .then(function (x) { closeSheet(); haptic('success'); toast(isNew ? 'Объект создан' : 'Сохранено'); drawTeam(x); })
+        .catch(function (er) { btn.disabled = false; $('#oErr').textContent = er.message; $('#oErr').hidden = false; });
+    };
+  });
+}
+function openGrant(u, isNew) {
+  u = u || { tgId: '', name: '' };
+  var role = u.role || 'Бригадир';
+  var h = '<h3>' + (isNew ? 'Выдать доступ' : 'Доступ') + '</h3>' +
+    (u.tgId && !isNew ? '' : '') +
+    '<div class="two"><div class="field"><label for="gId">Telegram ID</label><input id="gId" type="text" inputmode="numeric" value="' + esc(u.tgId) + '"' + (u.tgId ? ' readonly' : ' placeholder="Например: 123456789"') + '></div>' +
+    '<div class="field"><label for="gName">Имя</label><input id="gName" type="text" value="' + esc(u.name || '') + '"></div></div>' +
+    '<div class="field"><label>Роль</label><div class="picks"><label><input type="radio" name="gRole" value="Бригадир"' + (role === 'Бригадир' ? ' checked' : '') + '> Бригадир — видит только свой объект</label>' +
+    '<label><input type="radio" name="gRole" value="Руководитель"' + (role === 'Руководитель' ? ' checked' : '') + '> Руководитель — видит всё</label></div></div>' +
+    '<div class="field" id="gObjBox"><label for="gObj">Объект</label><select id="gObj">' + objOptions(u.objectId, true) + '</select></div>' +
+    '<div class="err" id="gErr" hidden></div><button class="btn block" id="gSave">' + (isNew ? 'Выдать доступ' : 'Сохранить') + '</button>' +
+    (!isNew && !u.self ? '<button class="btn danger-ghost block" id="gDel">Закрыть доступ</button>' : '');
+  openSheet(h, function (sh) {
+    function sync() { $('#gObjBox').hidden = picked('gRole') !== 'Бригадир'; }
+    sh.querySelectorAll('input[name="gRole"]').forEach(function (r) { r.onchange = sync; }); sync();
+    $('#gSave').onclick = function () {
+      var btn = this; btn.disabled = true;
+      api('saveUser', { tgId: $('#gId').value.trim(), name: $('#gName').value, role: picked('gRole'), objectId: $('#gObj').value })
+        .then(function (x) { closeSheet(); haptic('success'); toast('Доступ выдан'); drawTeam(x); })
+        .catch(function (er) { btn.disabled = false; $('#gErr').textContent = er.message; $('#gErr').hidden = false; });
+    };
+    var del = $('#gDel');
+    if (del) del.onclick = function () {
+      if (del.dataset.sure !== '1') { del.dataset.sure = '1'; del.textContent = 'Нажмите ещё раз, чтобы закрыть доступ'; return; }
+      del.disabled = true; api('removeUser', { tgId: u.tgId }).then(function (x) { closeSheet(); toast('Доступ закрыт'); drawTeam(x); }).catch(fail);
+    };
+  });
+}
+
+/* ================= ВЫГРУЗКА ================= */
+function doExport() {
+  openSheet('<h3>Выгрузка отчёта</h3><div class="muted">' + fmtMonth(S.month) + ' · ' + esc(S.obj ? objName(S.obj) : (S.init.me.isBoss ? 'все объекты' : objName(S.init.me.objectId))) +
+    '</div><div class="muted" style="font-size:14px">Будет создана новая Google Таблица с листами: Сотрудники (зарплата), Табель (по дням), Объекты, Записи.</div><button class="btn block" id="xGo">' + ic('export') + 'Создать Google Таблицу</button>', function () {
+    $('#xGo').onclick = function () {
+      var btn = this; btn.disabled = true; btn.textContent = 'Формирую отчёт…';
+      api('export', { month: S.month, objectId: S.obj }).then(function (r) {
+        if (r.demo) return exportPreview(r);
+        haptic('success');
+        openSheet('<h3>Отчёт готов</h3><div class="muted" style="font-size:14px">' + esc(r.title) + '</div>' +
+          '<button class="btn block" id="xOpen">Открыть Google Таблицу</button><button class="btn sec block" id="xXlsx">Скачать Excel (.xlsx)</button>' +
+          '<div class="hint" style="font-size:13px">Таблица сохранена на Google Диске руководителя. Открыть её может только тот, у кого есть ссылка.</div>', function () {
+          $('#xOpen').onclick = function () { openLink(r.url); };
+          $('#xXlsx').onclick = function () { openLink(r.xlsxUrl); };
+        });
+      }).catch(function (e) { btn.disabled = false; btn.textContent = 'Создать Google Таблицу'; fail(e); });
+    };
+  });
+}
+function exportPreview(r) {
+  var cur = 0;
+  function draw() {
+    var s = r.sheets[cur];
+    var h = '<h3>Так будет выглядеть отчёт</h3><div class="muted" style="font-size:13px">В демо таблица не создаётся. В рабочей версии откроется Google Таблица с этими листами.</div>' +
+      '<div class="tabs2">' + r.sheets.map(function (x, i) { return '<button data-i="' + i + '" aria-pressed="' + (i === cur) + '">' + esc(x.name) + '</button>'; }).join('') + '</div>' +
+      '<div class="xtable"><table><thead><tr>' + s.header.map(function (x) { return '<th>' + esc(x) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      s.rows.slice(0, 40).map(function (row) { return '<tr>' + row.map(function (c) { return '<td' + (typeof c === 'number' ? ' class="num" style="text-align:right"' : '') + '>' + esc(typeof c === 'number' ? nf1.format(c) : c) + '</td>'; }).join('') + '</tr>'; }).join('') +
+      '</tbody></table></div>' + (s.rows.length > 40 ? '<div class="hint" style="font-size:12px">Показаны первые 40 строк из ' + s.rows.length + '</div>' : '') + '<button class="btn sec block" id="xClose">Закрыть</button>';
+    openSheet(h, function (sh) {
+      sh.querySelectorAll('[data-i]').forEach(function (b) { b.onclick = function () { cur = +b.dataset.i; draw(); }; });
+      $('#xClose').onclick = closeSheet;
+    });
+  }
+  draw();
+}
+
+/* ================= служебные экраны ================= */
+function renderUnknown(j) {
+  $('#tabs').hidden = true; $('#top .wrap').innerHTML = '<div class="title-row"><h1>Табель бригад</h1></div>';
+  $('#view').innerHTML = '<div class="center-screen"><div style="font-size:18px;font-weight:600">' + esc(j.tgName || 'Здравствуйте') + ', вас пока нет в списке</div>' +
+    '<div class="muted">Заявка отправлена руководителю. Когда он выдаст доступ, закройте и снова откройте приложение.<br>Ваш Telegram ID:</div><div class="id" id="tgId">' + esc(j.tgId) + '</div>' +
+    '<button class="btn sec" id="cp">Скопировать ID</button><div class="hint" style="font-size:13px">После этого закройте и снова откройте приложение.</div></div>';
+  $('#cp').onclick = function () { navigator.clipboard && navigator.clipboard.writeText(j.tgId).then(function () { toast('Скопировано'); }, function () { toast('Выделите номер и скопируйте'); }); };
+}
+function renderOutside() {
+  $('#top .wrap').innerHTML = '<div class="title-row"><h1>Табель бригад</h1></div>';
+  $('#view').innerHTML = '<div class="center-screen"><div style="font-size:18px;font-weight:600">Откройте приложение через бота в Telegram</div><div class="muted">Вход по вашему Telegram-аккаунту, пароль не нужен.</div><button class="btn" id="goDemo">Посмотреть демо</button></div>';
+  $('#goDemo').onclick = function () { startDemo(); };
+}
+function demoBar() {
+  var bar = $('#demo'); bar.hidden = false;
+  var objs = Demo.objects();
+  bar.innerHTML = '<div class="wrap"><b>Демо</b><span>данные вымышленные · смотреть как</span><select id="demoRole" aria-label="Смотреть как">' + Demo.users().map(function (u) {
+    var o = objs.filter(function (x) { return x.id === u.objectId; })[0];
+    return '<option value="' + u.tgId + '"' + (u.tgId === Demo.role() ? ' selected' : '') + '>' + esc(u.role + ' — ' + (o ? o.name : 'все объекты')) + '</option>'; }).join('') + '</select></div>';
+  $('#demoRole').onchange = function () { Demo.setRole(this.value); closePage(); boot(); };
+}
+
+/* ================= запуск ================= */
+function applyInit(d, fetchedAt) {
+  S.init = d;
+  var t = d.today.split('-'), hm = (d.time || '00:00').split(':');
+  S.offset = Date.UTC(+t[0], +t[1] - 1, +t[2], +hm[0], +hm[1]) - (fetchedAt || Date.now());
+  d.today = serverNow().date;
+  if (d.first) cput(ckey(d.first.action, d.first.params), d.first.data);
+  if (!DEMO && d.version !== Core.VERSION && !$('#oldsrv')) {
+    var old = document.createElement('div'); old.className = 'wrap'; old.id = 'oldsrv';
+    old.innerHTML = '<div class="notice" style="margin-top:10px"><b>Сервер работает на старой версии кода.</b> Часть функций не будет работать. В Apps Script: «Начать развертывание → Управление развертываниями → карандаш → Версия: Новая версия → Развернуть».</div>';
+    $('#top').appendChild(old);
+  }
+}
+function boot() {
+  S.obj = ''; S.staffQ = '';
+  qLoad();
+  var cached = cget('init');
+  function start(d) {
+    S.date = d.today; S.month = Core.util.monthOf(d.today);
+    S.tab = d.me.isBoss ? 'dash' : 'today';
+    renderTabs(); render();
+  }
+  if (cached && cached.d.me) {                        // мгновенный старт из сохранённого, свежие данные — следом
+    applyInit(cached.d, cached.t); start(cached.d);
+    api('init', { withFirst: true }).then(function (d) {
+      cput('init', d); applyInit(d); renderTabs();
+      if (d.first && S.tab === (d.first.action === 'dashboard' ? 'dash' : 'today')) render();
+      qRun();
+    }).catch(function (e) { if (!e.silent) toast(navigator.onLine === false ? 'Нет интернета — показаны сохранённые данные' : 'Не удалось обновить: ' + e.message); });
+    return;
+  }
+  api('init', { withFirst: true }).then(function (d) {
+    cput('init', d); applyInit(d); start(d); qRun();
+  }).catch(function (e) { if (!e.silent) { $('#top .wrap').innerHTML = '<div class="title-row"><h1>Табель бригад</h1></div>'; errorView(e); } });
+}
+function startDemo() { DEMO = true; demoBar(); boot(); }
+
+function applyTheme() {
+  if (!tg) return;
+  var p = tg.themeParams || {}, r = document.documentElement;
+  if (tg.colorScheme) r.setAttribute('data-theme', tg.colorScheme);
+  var set = function (k, v) { if (v) r.style.setProperty(k, v); };
+  set('--bg', p.secondary_bg_color); set('--surface', p.section_bg_color || p.bg_color); set('--fg', p.text_color);
+  set('--muted', p.subtitle_text_color || p.hint_color); set('--hint', p.hint_color); set('--accent', p.button_color); set('--accent-fg', p.button_text_color);
+  try { tg.setHeaderColor('secondary_bg_color'); tg.setBackgroundColor('secondary_bg_color'); } catch (e) {}
+}
+
+if (IN_TG) {
+  tg.ready(); tg.expand(); applyTheme(); tg.onEvent('themeChanged', applyTheme);
+  if (!API_URL || API_URL.indexOf('__') === 0) { startDemo(); }
+  else if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec\/?$/.test(API_URL.trim())) {
+    $('#top .wrap').innerHTML = '<div class="title-row"><h1>Табель бригад</h1></div>';
+    var er = new Error('Неверный адрес сервера в index.html'); er.net = true; errorView(er);
+  } else { API_URL = API_URL.trim(); boot(); }
+} else if (!API_URL || API_URL.indexOf('__') === 0) {
+  startDemo();
+} else {
+  renderOutside();
+}
+})();
+</script>
+
+</body>
+</html>
